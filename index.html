@@ -157,16 +157,21 @@
   .screen-pad {
     position: relative;
     z-index: 1;
-    padding: 48px 18px 14px;
+    padding: 48px 14px 12px;
     flex: 1;
     display: grid;
-    /* 8 rows: header / mood / VINYL (flex) / meta / progress / controls / dial / shuffle.
-       The vinyl row uses minmax(0,1fr) so it shrinks to fit available
-       space — guarantees all controls below it remain visible. */
     grid-template-rows: auto auto minmax(0, 1fr) auto auto auto auto auto;
     row-gap: 6px;
     min-height: 0;
+    /* Critical: prevent any child from forcing horizontal overflow.
+       Every grid child gets min-width:0 so long text (artist names,
+       chip labels) can shrink and ellipsize instead of pushing the
+       layout wider than the screen. */
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
   }
+  .screen-pad > * { min-width: 0; max-width: 100%; }
   @media (max-width: 640px) {
     .screen-pad {
       padding: env(safe-area-inset-top, 28px) 16px env(safe-area-inset-bottom, 14px);
@@ -240,14 +245,16 @@
   .vinyl-wrap {
     position: relative;
     width: 100%;
-    max-width: min(320px, calc(100dvh - 470px), 100% - 8px);
+    /* Cap by smallest of: 300px design max, viewport-height budget,
+       viewport-width with ~30px breathing room each side (so the
+       tonearm pivot is never clipped by the screen edge). */
+    max-width: min(300px, calc(100dvh - 460px), calc(100vw - 60px));
     aspect-ratio: 1;
     margin: 0 auto;
     padding: 22px 22px 0 0;
     align-self: center;
     user-select: none;
     touch-action: pan-y;
-    /* never overflow the grid cell, even mid-animation */
     overflow: visible;
   }
   .vinyl-stage {
@@ -372,7 +379,14 @@
   }
 
   /* META */
-  .meta { text-align: center; margin-bottom: 10px; padding: 0 8px; flex-shrink: 0; }
+  .meta {
+    text-align: center;
+    margin-bottom: 10px;
+    padding: 0 8px;
+    flex-shrink: 0;
+    min-width: 0;
+    max-width: 100%;
+  }
   .meta .movie {
     font-size: 9px;
     letter-spacing: 1.8px;
@@ -464,11 +478,14 @@
   /* CONTROLS */
   .controls {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+    /* minmax(0,1fr) — without the 0-min, each cell defaults to
+       its content min-width and 5 cells overflow on narrow screens */
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 6px;
     align-items: center;
     margin-bottom: 12px;
     flex-shrink: 0;
+    min-width: 0;
   }
   .ctrl {
     appearance: none; border: none; background: transparent;
@@ -536,7 +553,9 @@
     backdrop-filter: blur(12px);
   }
   .dial button {
-    flex: 1;
+    flex: 1 1 0;
+    /* min-width: 0 lets chips shrink below content width when 5 don't fit */
+    min-width: 0;
     appearance: none; border: none;
     background: transparent;
     color: var(--fg-muted);
@@ -548,6 +567,8 @@
     transition: background var(--t-fast), color var(--t-fast), transform var(--t-fast);
     min-height: 28px;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .dial button:hover { color: var(--fg); }
   .dial button[aria-pressed="true"] {
@@ -598,19 +619,22 @@
 
   .toast {
     position: absolute;
-    top: 56px; left: 50%;
-    transform: translate(-50%, -120%);
-    background: var(--surface-strong);
+    bottom: 18px;     /* anchored at bottom — never overlaps brand/mood */
+    left: 50%;
+    transform: translate(-50%, 130%);
+    background: rgba(255,255,255,0.08);
     border: 1px solid var(--border-strong);
     backdrop-filter: blur(20px);
-    border-radius: 999px;
-    padding: 7px 14px;
+    border-radius: 14px;
+    padding: 9px 16px;
     font-size: 11px;
+    line-height: 1.35;
     z-index: 150;
     transition: transform var(--t-med);
-    max-width: 80%;
+    max-width: calc(100% - 32px);
     text-align: center;
     color: var(--fg);
+    pointer-events: none;
   }
   .toast.show { transform: translate(-50%, 0); }
 
@@ -1342,7 +1366,7 @@
     setTimeout(() => prefetchNext(), 100);
   });
   $('btn-keys').addEventListener('click', () => {
-    showToast('SPACE play · → next · ← prev · S shuffle · L like · M mystery · Swipe disc', 4500);
+    showToast('Space play · ←/→ skip · S shuffle · L like · M mystery', 4000);
   });
   $('progress').addEventListener('click', (ev) => {
     const rect = ev.currentTarget.getBoundingClientRect();
