@@ -1,29 +1,30 @@
 #!/usr/bin/env python3
 """
-Refresh catalog.json with Telugu film songs.
+Refresh catalog.json with FULL-LENGTH Telugu film songs from JioSaavn.
 
-Source flow:
-  1. iTunes Search API gives us authoritative metadata: trackId, title,
-     artist, movie (collectionName), 1000x1000 movie poster, release year.
-  2. yt-dlp searches YouTube for each song and stores the matching
-     videoId. Frontend uses that for full-length audio playback.
+Why JioSaavn, not iTunes/YouTube/etc:
+- iTunes only serves 30-sec previews (Apple's preview limit)
+- YouTube is video, requires IFrame, embed-disabled songs are common
+- Spotify needs OAuth + Premium for full tracks
+- JioSaavn has the largest legitimate Telugu film catalog
+- Full songs available on Saavn's own CDN (aac.saavncdn.com)
+- CORS = '*' on the CDN — plays in any browser
+- No API key required
 
-The catalog grows over time. New iTunes results are merged in. Songs
-without a YouTube videoId are looked up (capped per run by MAX_LOOKUPS
-so the workflow stays under its time budget).
+Pipeline per song:
+1. search.getResults    -> list of {id, song, album, image, year, singers}
+2. song.getDetails      -> {encrypted_media_url, duration, ...}
+3. DES-ECB decrypt      -> https://aac.saavncdn.com/.../<id>_160.mp4 (full song)
 
-Year tagging is taken straight from iTunes' releaseDate field — it's
-the soundtrack release date, which equals the movie release in nearly
-every case for Telugu film music. The "movie" displayed in the app is
-collectionName with the "(Original Motion Picture Soundtrack)" suffix
-trimmed off.
+Daily workflow re-runs this with dedupe — catalog grows over time.
 """
 from __future__ import annotations
 
+import base64
+import html
 import json
 import os
 import re
-import subprocess
 import sys
 import time
 import urllib.parse
@@ -36,144 +37,201 @@ try:
     import requests
 except ImportError:
     sys.exit("Install requests: pip install requests")
+try:
+    from cryptography.hazmat.backends import default_backend
+    from cryptography.hazmat.primitives.ciphers import Cipher, modes
+    from cryptography.hazmat.decrepit.ciphers.algorithms import TripleDES
+except ImportError:
+    sys.exit("Install cryptography: pip install cryptography")
+
 
 # ---------- Config ----------
 
-# Diverse query set covering composers, singers, era keywords, and famous
-# movies. iTunes returns up to 200 per query; after dedupe we typically
-# get 1500-3000 unique tracks across all of these.
+# Diverse JioSaavn search queries to seed the catalog. Each returns
+# 30-50 results; with dedupe across queries we get 1500-3000 unique songs.
 QUERIES = [
-    # Composers / music directors
+    # Composers
     'ilaiyaraaja telugu', 'ar rahman telugu', 'devi sri prasad', 'thaman s telugu',
-    'anirudh telugu', 'mickey j meyer', 'harris jayaraj telugu', 'vidyasagar telugu',
-    'koti telugu', 'raj koti', 'm m keeravani', 'ramana gogula',
-    'mani sharma telugu', 'chakri telugu', 'rp patnaik', 'sunny m r',
+    'anirudh telugu', 'm m keeravani', 'mickey j meyer', 'harris jayaraj telugu',
+    'mani sharma telugu', 'koti telugu', 'chakri telugu', 'rp patnaik',
+    'vidyasagar telugu', 'ramana gogula', 'sunny m r',
     # Singers
     'ghantasala telugu', 'spb telugu', 'sid sriram telugu', 'shreya ghoshal telugu',
-    'kk telugu', 'sonu nigam telugu', 'javed ali telugu', 'chinmayi telugu',
-    'sunitha telugu', 'armaan malik telugu', 'karthik telugu', 'haricharan telugu',
-    'mangli telugu', 'nakash aziz telugu', 'kailash kher telugu', 'arijit singh telugu',
+    'sunitha telugu', 'kk telugu', 'sonu nigam telugu', 'chinmayi telugu',
+    'mangli telugu', 'haricharan telugu',
     # Famous movies
-    'pushpa telugu', 'baahubali', 'rrr telugu', 'magadheera', 'eega telugu',
+    'pushpa telugu', 'baahubali telugu', 'rrr telugu', 'magadheera', 'eega telugu',
     'arjun reddy', 'jersey telugu', 'fidaa telugu', 'ala vaikunthapurramuloo',
-    'sarrainodu', 'saaho', 'athadu telugu', 'okkadu telugu', 'pokiri telugu',
-    'khaidi telugu', 'sye raa', 'maharshi telugu', 'kushi telugu',
-    'arjuna phalguna', 'salaar telugu', 'guntur kaaram', 'devara telugu',
-    'kalki 2898', 'hi nanna telugu', 'mr bachchan',
-    # Generic / era
-    'telugu hits', 'tollywood songs', 'telugu romantic', 'telugu folk',
-    'telugu old songs', 'telugu super hit', 'telugu melody', 'telugu dance',
-    'telugu 1970', 'telugu 1980', 'telugu 1990', 'telugu 2000',
-    'telugu 2010', 'telugu 2015', 'telugu 2020', 'telugu 2024',
-    'telugu mass songs', 'telugu duet', 'telugu sad songs',
+    'sarrainodu', 'saaho', 'devara telugu', 'salaar telugu', 'guntur kaaram',
+    'kalki 2898', 'hi nanna', 'pokiri telugu', 'okkadu telugu',
+    # Era-keyed
+    'telugu hits', 'telugu old songs', 'telugu romantic', 'telugu folk',
+    'telugu 90s', 'telugu 2000', 'telugu 2010', 'telugu 2024', 'telugu 2025',
+    'telugu mass songs', 'telugu melody', 'telugu duet',
 ]
 
 CATALOG_PATH = Path('catalog.json')
-MAX_LOOKUPS = int(os.environ.get('MAX_LOOKUPS', '300'))
+MAX_DETAILS = int(os.environ.get('MAX_DETAILS', '600'))
 
-# ---------- iTunes ----------
+DES_KEY = b'38346591'
 
-def itunes_search(query: str) -> list[dict]:
-    url = (
-        'https://itunes.apple.com/search?'
-        + urllib.parse.urlencode({
-            'term': query,
-            'media': 'music',
-            'entity': 'song',
-            'limit': 200,
-            'country': 'in',
-        })
-    )
-    try:
-        r = requests.get(url, timeout=20, headers={'User-Agent': 'yadrcha-catalog/1.0'})
-        r.raise_for_status()
-        return r.json().get('results', [])
-    except Exception as e:
-        print(f'  ! iTunes fetch failed for {query!r}: {e}', file=sys.stderr)
-        return []
+API_BASE = 'https://www.jiosaavn.com/api.php'
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                  '(KHTML, like Gecko) Chrome/121.0 Safari/537.36',
+    'Referer': 'https://www.jiosaavn.com/',
+    'Accept': 'application/json,text/javascript,*/*;q=0.9',
+    'Accept-Language': 'en-US,en;q=0.9',
+}
+
+# A shared session reuses the connection pool.
+SESSION = requests.Session()
+SESSION.headers.update(HEADERS)
 
 
-def clean_movie(coll: str) -> str:
-    """Strip iTunes packaging suffixes from collection (movie) name."""
-    if not coll:
-        return ''
-    s = coll
-    s = re.sub(r'\s*\([^)]*soundtrack[^)]*\)\s*$', '', s, flags=re.IGNORECASE)
-    s = re.sub(r'\s*\([^)]*original score[^)]*\)\s*$', '', s, flags=re.IGNORECASE)
-    s = re.sub(r'\s*\(\s*from\s+[^)]+\)\s*$', '', s, flags=re.IGNORECASE)
-    s = re.sub(r'\s*-\s*single\s*$', '', s, flags=re.IGNORECASE)
-    s = re.sub(r'\s*-\s*ep\s*$', '', s, flags=re.IGNORECASE)
-    return s.strip()
+# ---------- JioSaavn API ----------
 
-
-def normalize(track: dict) -> dict | None:
-    if not track or not track.get('previewUrl'):
-        return None
-    if track.get('primaryGenreName') != 'Telugu':
-        return None
-    rd = track.get('releaseDate') or ''
-    try:
-        year = int(rd[:4]) if rd else None
-    except ValueError:
-        year = None
-    art100 = track.get('artworkUrl100') or ''
-    art_hd = art100.replace('/100x100bb.', '/1000x1000bb.')
-    return {
-        'i': track['trackId'],
-        't': (track.get('trackName') or '').strip(),
-        'a': (track.get('artistName') or '').strip(),
-        'm': clean_movie(track.get('collectionName') or ''),
-        'u': track['previewUrl'],
-        'c': art_hd,
-        'y': year,
-        'd': int((track.get('trackTimeMillis') or 30000) / 1000),
+def jio_get(call: str, params: dict, max_attempts: int = 5) -> dict | None:
+    """Call JioSaavn API with retry+backoff on 429/5xx."""
+    qs = {
+        '__call': call,
+        '_format': 'json',
+        '_marker': '0',
+        'ctx': 'web6dot0',
+        **params,
     }
-
-
-# ---------- yt-dlp YouTube search ----------
-
-def yt_search(song: dict) -> str | None:
-    """Find a YouTube videoId for a song. Returns 11-char ID or None."""
-    title = song.get('t') or ''
-    artist = song.get('a') or ''
-    movie = song.get('m') or ''
-
-    queries = [
-        f'{title} {movie} telugu song',
-        f'{title} {movie}',
-        f'{title} {artist} telugu',
-        f'{title} {artist}',
-    ]
-
-    for q in queries:
+    url = f'{API_BASE}?{urllib.parse.urlencode(qs)}'
+    delay = 10
+    for attempt in range(1, max_attempts + 1):
         try:
-            r = subprocess.run(
-                [
-                    'yt-dlp',
-                    f'ytsearch1:{q}',
-                    '--get-id',
-                    '--skip-download',
-                    '--no-warnings',
-                    '--socket-timeout', '15',
-                    '--no-playlist',
-                ],
-                capture_output=True,
-                text=True,
-                timeout=35,
-            )
-            vid = r.stdout.strip().splitlines()[0] if r.stdout.strip() else ''
-            if len(vid) == 11 and re.match(r'^[\w-]+$', vid):
-                return vid
-        except subprocess.TimeoutExpired:
-            print(f'  ! yt-dlp timeout for {title!r}', file=sys.stderr)
-            continue
+            r = SESSION.get(url, timeout=20)
+            if r.status_code in (429, 502, 503):
+                print(f'  ! {call} {r.status_code} (attempt {attempt}/{max_attempts}) — wait {delay}s', file=sys.stderr)
+                time.sleep(delay)
+                delay = min(delay * 2, 240)
+                continue
+            r.raise_for_status()
+            # JioSaavn sometimes returns JSON-with-junk-prefix; tolerate
+            text = r.text
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                # Strip leading junk before first '{'
+                start = text.find('{')
+                if start >= 0:
+                    return json.loads(text[start:])
+                return None
         except Exception as e:
-            print(f'  ! yt-dlp error for {title!r}: {e}', file=sys.stderr)
-            continue
+            print(f'  ! {call} error (attempt {attempt}): {e}', file=sys.stderr)
+            time.sleep(delay)
+            delay = min(delay * 2, 240)
     return None
 
 
-# ---------- Main ----------
+def search_songs(query: str) -> list[dict]:
+    res = jio_get('search.getResults', {'q': query, 'p': '1', 'n': '40'})
+    if not res:
+        return []
+    return res.get('results', []) or []
+
+
+def song_details(song_id: str) -> dict | None:
+    """Returns the song's encrypted_media_url and full metadata."""
+    res = jio_get('song.getDetails', {'pids': song_id})
+    if not res:
+        return None
+    songs = res.get('songs') or []
+    return songs[0] if songs else None
+
+
+# ---------- URL decryption ----------
+
+def decrypt_media_url(encrypted_b64: str) -> str | None:
+    """Decrypts JioSaavn's encrypted_media_url to a real CDN URL.
+
+    Algorithm: DES-ECB with key '38346591', PKCS7 padding (we don't enforce
+    strict padding — just strip trailing pad bytes if reasonable).
+    """
+    try:
+        # cryptography uses TripleDES — when the key is 8 bytes it operates
+        # as plain DES (compatible with single-DES ECB).
+        key3 = DES_KEY * 3  # 24 bytes for TripleDES API
+        cipher = Cipher(TripleDES(key3), modes.ECB(), backend=default_backend())
+        d = cipher.decryptor()
+        raw = d.update(base64.b64decode(encrypted_b64)) + d.finalize()
+        if not raw:
+            return None
+        # Strip PKCS7 padding (last byte is pad length)
+        pad = raw[-1]
+        if 0 < pad <= 8:
+            raw = raw[:-pad]
+        url = raw.decode('utf-8', errors='ignore').strip('\x00').strip()
+        if not url.startswith('http'):
+            return None
+        return url
+    except Exception as e:
+        print(f'  ! decrypt failed: {e}', file=sys.stderr)
+        return None
+
+
+def upgrade_quality(url: str) -> str:
+    """Replace _96.mp4 / _128.mp4 with _160.mp4 for higher quality.
+    Falls back to whatever exists; frontend can always play whichever URL."""
+    return re.sub(r'_(?:96|128)\.mp4$', '_160.mp4', url)
+
+
+def hd_image(url: str) -> str:
+    """JioSaavn covers come at 150x150; upscale URL to 500x500."""
+    return re.sub(r'(\d{2,4})x\1', '500x500', url) if url else url
+
+
+def clean_text(s: str) -> str:
+    if not s:
+        return ''
+    return html.unescape(s).strip()
+
+
+# ---------- Normalize ----------
+
+def normalize_detail(d: dict) -> dict | None:
+    if not d:
+        return None
+    if (d.get('language') or '').lower() != 'telugu':
+        return None
+    enc = d.get('encrypted_media_url')
+    if not enc:
+        return None
+    media_url = decrypt_media_url(enc)
+    if not media_url:
+        return None
+    media_url = upgrade_quality(media_url)
+    title = clean_text(d.get('song') or '')
+    album = clean_text(d.get('album') or '')
+    singers = clean_text(d.get('singers') or d.get('primary_artists') or '')
+    music = clean_text(d.get('music') or '')
+    artist = singers or music or 'Unknown'
+    image = hd_image(d.get('image') or '')
+    try:
+        year = int(d.get('year')) if d.get('year') else None
+    except ValueError:
+        year = None
+    try:
+        duration = int(d.get('duration')) if d.get('duration') else None
+    except (TypeError, ValueError):
+        duration = None
+    return {
+        'i': d.get('id'),
+        't': title,
+        'a': artist,
+        'm': album,
+        'u': media_url,
+        'c': image,
+        'y': year,
+        'd': duration or 240,
+    }
+
+
+# ---------- Catalog I/O ----------
 
 def load_catalog() -> dict:
     if CATALOG_PATH.exists():
@@ -182,7 +240,7 @@ def load_catalog() -> dict:
                 return json.load(f)
         except Exception as e:
             print(f'! Could not load existing catalog: {e}', file=sys.stderr)
-    return {'version': 1, 'songs': []}
+    return {'version': 2, 'songs': []}
 
 
 def save_catalog(cat: dict) -> None:
@@ -191,93 +249,77 @@ def save_catalog(cat: dict) -> None:
         json.dump(cat, f, separators=(',', ':'), ensure_ascii=False)
 
 
+# ---------- Main ----------
+
 def main() -> int:
-    print('=== Yadrcha catalog refresh ===')
+    print('=== Yadrcha catalog refresh (JioSaavn) ===')
     cat = load_catalog()
-    by_id: dict[int, dict] = {s['i']: s for s in cat.get('songs', [])}
-    print(f'Loaded {len(by_id)} existing songs')
+    by_id: dict[str, dict] = {s['i']: s for s in cat.get('songs', [])}
+    existing_count = len(by_id)
+    print(f'Loaded {existing_count} existing songs')
 
-    # 1. Fetch all iTunes queries; merge new metadata
-    new_count = 0
+    # 1. Search across queries — collect candidate song IDs to detail-fetch
+    candidates: dict[str, dict] = {}  # song_id -> light search result
     for i, q in enumerate(QUERIES, 1):
-        print(f'[iTunes {i}/{len(QUERIES)}] {q}')
-        for r in itunes_search(q):
-            n = normalize(r)
-            if not n:
+        results = search_songs(q)
+        added = 0
+        for r in results:
+            sid = r.get('id')
+            if not sid:
                 continue
-            existing = by_id.get(n['i'])
-            if existing:
-                # Refresh metadata (preserve yt id) — handles iTunes
-                # corrections to title/year/movie over time.
-                yt = existing.get('yt')
-                bad = existing.get('bad')
-                existing.update(n)
-                if yt:
-                    existing['yt'] = yt
-                if bad:
-                    existing['bad'] = bad
-            else:
-                by_id[n['i']] = n
-                new_count += 1
-        time.sleep(0.4)
+            if sid not in by_id and sid not in candidates:
+                candidates[sid] = r
+                added += 1
+        print(f'[search {i}/{len(QUERIES)}] {q!r}: {len(results)} hits, {added} new candidates')
+        time.sleep(1.0)  # be polite
 
-    print(f'Added {new_count} new songs via iTunes')
+    print(f'Total new candidates: {len(candidates)}')
 
-    # 2. yt-dlp lookups for songs missing yt id (priority: new songs first)
-    todo: list[dict] = []
-    for s in by_id.values():
-        if 'yt' not in s and not s.get('bad'):
-            todo.append(s)
+    # 2. Fetch full details (with encrypted_media_url) in parallel.
+    # Cap at MAX_DETAILS so a single workflow run stays under the time budget.
+    todo = list(candidates.values())[:MAX_DETAILS]
+    print(f'Fetching details for {len(todo)} songs (4 parallel workers)...')
 
-    # Sort: prefer most recent year first (so latest hits get YT IDs first)
-    todo.sort(key=lambda s: s.get('y') or 0, reverse=True)
-    todo = todo[:MAX_LOOKUPS]
-
-    print(f'Looking up YouTube IDs for {len(todo)} songs in parallel (4 workers)...')
+    save_lock = Lock()
     found = 0
     failed = 0
     completed = 0
-    save_lock = Lock()
 
-    def worker(s):
-        vid = yt_search(s)
-        return s, vid
+    def worker(meta):
+        sid = meta['id']
+        d = song_details(sid)
+        if not d:
+            return None
+        return normalize_detail(d)
 
     with ThreadPoolExecutor(max_workers=4) as ex:
-        futures = [ex.submit(worker, s) for s in todo]
+        futures = [ex.submit(worker, m) for m in todo]
         for fut in as_completed(futures):
             try:
-                s, vid = fut.result()
+                song = fut.result()
             except Exception as e:
                 print(f'  ! worker exception: {e}', file=sys.stderr)
-                continue
-            if vid:
-                s['yt'] = vid
+                song = None
+            if song and song.get('u'):
+                by_id[song['i']] = song
                 found += 1
             else:
-                s['bad'] = True
                 failed += 1
             completed += 1
-            if completed % 20 == 0:
-                print(f'  {completed}/{len(todo)} | found {found}, failed {failed}')
-                # Save partial so a workflow timeout doesn't lose progress
+            if completed % 25 == 0:
+                print(f'  {completed}/{len(todo)} | added {found}, failed {failed}')
                 with save_lock:
-                    partial = {'version': 1, 'songs': list(by_id.values())}
+                    partial = {'version': 2, 'songs': list(by_id.values())}
                     save_catalog(partial)
 
-    cat = {
-        'version': 1,
-        'songs': list(by_id.values()),
-    }
+    cat = {'version': 2, 'songs': list(by_id.values())}
     save_catalog(cat)
 
     total = len(by_id)
-    with_yt = sum(1 for s in by_id.values() if s.get('yt'))
-    print(f'=== Done ===')
-    print(f'Total songs:         {total}')
-    print(f'With YouTube ID:     {with_yt}')
-    print(f'Found this run:      {found}')
-    print(f'Failed this run:     {failed}')
+    print('=== Done ===')
+    print(f'Songs in catalog: {total} (was {existing_count})')
+    print(f'Added this run:   {found}')
+    print(f'Failed this run:  {failed}')
     return 0
 
 

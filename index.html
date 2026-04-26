@@ -734,7 +734,7 @@
           </div>
           <div class="times">
             <span id="time-cur">0:00</span>
-            <span><span id="time-tot">0:00</span><span class="preview-tag hidden" id="preview-tag">Preview</span></span>
+            <span id="time-tot">0:00</span>
           </div>
         </div>
 
@@ -799,36 +799,26 @@
   </div>
 </div>
 
-<audio id="audio" preload="auto"></audio>
-<div id="yt-frame"><div id="yt-host"></div></div>
+<audio id="audio" preload="auto" crossorigin="anonymous"></audio>
 
 <script>
 /* ============================================================
    YADRCHA — Random Telugu Music
-   - Catalog: catalog.json in repo (maintained by GitHub Action)
-   - Audio: hidden YouTube IFrame for full songs (preferred),
-            HTML5 audio with iTunes 30s preview as fallback.
-   - Metadata: iTunes Search API (movie poster, title, year)
-   - On HTTPS (GitHub Pages), YT IFrame autoplay works fine.
+   - Source: catalog.json in repo (maintained by GitHub Action)
+   - Audio: HTML5 audio playing FULL Telugu songs from JioSaavn CDN
+            (decrypted media URLs stored in the catalog)
+   - Metadata: JioSaavn — title, movie, year, singers, movie poster
    ============================================================ */
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
 
-  // Cutoff for "Latest" era — past N years, including current year
+  // "Latest" = past 3 years (current and 2 prior). Auto-shifts each year.
   const NOW_YEAR = new Date().getFullYear();
-  const LATEST_FROM_YEAR = NOW_YEAR - 2;   // 2024+ when current year is 2026
+  const LATEST_FROM_YEAR = NOW_YEAR - 2;
 
-  // Live iTunes fallback queries when catalog.json is empty/stale
-  const FALLBACK_QUERIES = [
-    'telugu hits', 'tollywood songs', 'telugu romantic', 'telugu old songs',
-    'devi sri prasad', 'thaman s telugu', 'anirudh telugu', 'sid sriram telugu',
-    'ar rahman telugu', 'ilaiyaraaja telugu', 'spb telugu', 'shreya ghoshal telugu',
-    'telugu 2024', 'telugu 2025', 'pushpa telugu', 'baahubali',
-  ];
-
-  const CACHE_KEY = 'yadrcha.catalog.v3';
-  const CACHE_TTL = 24 * 60 * 60 * 1000; // 1 day; catalog.json updates daily anyway
+  const CACHE_KEY = 'yadrcha.catalog.v4';
+  const CACHE_TTL = 24 * 60 * 60 * 1000;
 
   /* ---------- State ---------- */
   const state = {
@@ -839,9 +829,6 @@
     isPlaying: false,
     isMystery: false,
     likes: new Set(JSON.parse(localStorage.getItem('yadrcha.likes') || '[]')),
-    ytPlayer: null,
-    ytReady: false,
-    audioEngine: null, // 'yt' | 'preview' | null
   };
 
   /* ---------- Utils ---------- */
@@ -854,7 +841,7 @@
     if (year < 1990) return 'vintage';
     if (year < 2000) return '90s';
     if (year >= LATEST_FROM_YEAR) return 'latest';
-    return '2000s'; // 2000 through (LATEST_FROM_YEAR - 1)
+    return '2000s';
   }
   function showToast(msg, ms = 2200) {
     const t = $('toast');
@@ -879,55 +866,37 @@
     document.documentElement.style.setProperty('--gold', m.accent);
   }
 
-  /* ---------- Catalog load ----------
-     Order of preference:
-       1. catalog.json from the repo (populated by GH Action)
-       2. localStorage cache
-       3. Live iTunes search (cold-start fallback) */
+  /* ---------- Catalog load (catalog.json -> cache fallback) ---------- */
   async function loadCatalog() {
-    // 1. catalog.json
     try {
       const url = new URL('catalog.json', location.href).href + '?t=' + Date.now();
       const r = await fetch(url, { cache: 'no-cache' });
       if (r.ok) {
         const data = await r.json();
-        if (data && Array.isArray(data.songs) && data.songs.length > 50) {
+        if (data && Array.isArray(data.songs) && data.songs.length > 30) {
+          saveCache(data.songs);
           return expandCatalog(data.songs);
         }
       }
     } catch (_) {}
-
-    // 2. localStorage cache
     try {
       const raw = localStorage.getItem(CACHE_KEY);
       if (raw) {
         const obj = JSON.parse(raw);
-        if (obj && Date.now() - obj.ts < CACHE_TTL && Array.isArray(obj.data) && obj.data.length > 50) {
+        if (obj && Date.now() - obj.ts < CACHE_TTL && Array.isArray(obj.data) && obj.data.length > 30) {
           return expandCatalog(obj.data);
         }
       }
     } catch (_) {}
-
-    // 3. Live iTunes
-    return await liveItunes();
+    return [];
   }
-
   function expandCatalog(slim) {
     return slim.map((s) => ({
-      id: s.i,
-      title: s.t,
-      artist: s.a,
-      movie: s.m,
-      preview: s.u,
-      cover: s.c,
-      year: s.y,
-      duration: s.d,
-      yt: s.yt || null,
-      bad: !!s.bad,
+      id: s.i, title: s.t, artist: s.a, movie: s.m,
+      url: s.u, cover: s.c, year: s.y, duration: s.d,
       era: pickEra(s.y),
     }));
   }
-
   function saveCache(slim) {
     try {
       localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: slim }));
@@ -939,41 +908,6 @@
     }
   }
 
-  async function liveItunes() {
-    const lists = await Promise.all(FALLBACK_QUERIES.map(async (q) => {
-      try {
-        const url = `https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&entity=song&limit=200&country=in`;
-        const r = await fetch(url, { mode: 'cors' });
-        if (!r.ok) return [];
-        const data = await r.json();
-        return data.results || [];
-      } catch (_) { return []; }
-    }));
-    const seen = new Set();
-    const out = [];
-    lists.flat().forEach((track) => {
-      if (!track || !track.previewUrl) return;
-      if (track.primaryGenreName !== 'Telugu') return;
-      if (seen.has(track.trackId)) return;
-      seen.add(track.trackId);
-      const year = track.releaseDate ? parseInt(track.releaseDate.slice(0, 4)) : null;
-      out.push({
-        i: track.trackId,
-        t: (track.trackName || '').trim(),
-        a: (track.artistName || '').trim(),
-        m: (track.collectionName || '')
-          .replace(/\s*\([^)]*soundtrack[^)]*\)\s*$/i, '')
-          .replace(/\s*-\s*single\s*$/i, '').trim(),
-        u: track.previewUrl,
-        c: (track.artworkUrl100 || '').replace(/\/\d+x\d+bb\./, '/1000x1000bb.'),
-        y: year,
-        d: Math.round((track.trackTimeMillis || 30000) / 1000),
-      });
-    });
-    saveCache(out);
-    return expandCatalog(out);
-  }
-
   /* ---------- Pool / random ---------- */
   function pool() {
     if (state.era === 'all') return state.catalog;
@@ -982,160 +916,49 @@
   function pickRandom() {
     const p = pool();
     if (!p.length) return null;
-    const recent = new Set(state.history.slice(-Math.min(p.length - 1, 20)));
+    const recent = new Set(state.history.slice(-Math.min(p.length - 1, 30)));
     const fresh = p.filter((s) => !recent.has(s.id) && (!state.current || s.id !== state.current.id));
     const choices = fresh.length ? fresh : p;
     return choices[Math.floor(Math.random() * choices.length)];
   }
 
-  /* ---------- Audio engine: hybrid YT + HTML5 audio ---------- */
+  /* ---------- Audio engine: HTML5 audio, full songs ---------- */
   const audio = $('audio');
-  audio.addEventListener('play',  () => { if (state.audioEngine === 'preview') { state.isPlaying = true;  renderPlayState(); } });
-  audio.addEventListener('pause', () => { if (state.audioEngine === 'preview') { state.isPlaying = false; renderPlayState(); } });
-  audio.addEventListener('ended', () => { if (state.audioEngine === 'preview') nextRandom(); });
+  audio.addEventListener('play',  () => { state.isPlaying = true;  renderPlayState(); });
+  audio.addEventListener('pause', () => { state.isPlaying = false; renderPlayState(); });
+  audio.addEventListener('ended', () => nextRandom());
   audio.addEventListener('timeupdate', () => {
-    if (state.audioEngine !== 'preview') return;
     const cur = audio.currentTime;
-    const tot = audio.duration || 30;
-    setProgress(cur, tot);
-  });
-  audio.addEventListener('error', () => {
-    if (state.audioEngine === 'preview') {
-      showToast('Couldn’t play that one · skipping');
-      setTimeout(nextRandom, 200);
-    }
-  });
-
-  function setProgress(cur, tot) {
+    const tot = audio.duration || (state.current?.duration || 0);
     const pct = tot > 0 ? (cur / tot) * 100 : 0;
     $('filled').style.width = pct + '%';
     $('thumb').style.left = pct + '%';
     $('time-cur').textContent = fmt(cur);
     $('time-tot').textContent = fmt(tot);
     $('progress').setAttribute('aria-valuenow', Math.round(pct));
-  }
-
-  // YouTube IFrame
-  function loadYTAPI() {
-    return new Promise((resolve) => {
-      if (window.YT && window.YT.Player) return resolve();
-      window.onYouTubeIframeAPIReady = () => resolve();
-      const tag = document.createElement('script');
-      tag.src = 'https://www.youtube.com/iframe_api';
-      tag.onerror = () => resolve();
-      document.head.appendChild(tag);
-    });
-  }
-  function ensureYtHost() {
-    if (!$('yt-host')) {
-      const c = document.createElement('div');
-      c.id = 'yt-host';
-      $('yt-frame').appendChild(c);
-    }
-  }
-  function patchIframeAllow() {
-    setTimeout(() => {
-      const iframe = $('yt-frame').querySelector('iframe');
-      if (iframe) {
-        iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
-      }
-    }, 100);
-  }
-
-  function createYtPlayer(videoId) {
-    if (state.ytPlayer) {
-      try { state.ytPlayer.destroy(); } catch (_) {}
-      state.ytPlayer = null;
-    }
-    ensureYtHost();
-    state.ytPlayer = new YT.Player('yt-host', {
-      height: '1', width: '1',
-      videoId,
-      playerVars: {
-        autoplay: 1, controls: 0, disablekb: 1, modestbranding: 1,
-        playsinline: 1, rel: 0, fs: 0, iv_load_policy: 3,
-      },
-      events: {
-        onReady: (e) => { state.ytReady = true; try { e.target.playVideo(); } catch (_) {} },
-        onStateChange: onYtStateChange,
-        onError: onYtError,
-      },
-    });
-    patchIframeAllow();
-  }
-  function onYtStateChange(e) {
-    if (state.audioEngine !== 'yt') return;
-    if (e.data === 1) { state.isPlaying = true; renderPlayState(); }
-    else if (e.data === 2) { state.isPlaying = false; renderPlayState(); }
-    else if (e.data === 0) { nextRandom(); }
-  }
-  function onYtError(e) {
-    if (state.audioEngine !== 'yt') return;
-    console.warn('[yadrcha] YT error', e.data, '— falling back to preview');
-    // Fall back to iTunes preview for this song
-    if (state.current) {
-      state.audioEngine = 'preview';
-      $('preview-tag').classList.remove('hidden');
-      audio.src = state.current.preview;
-      audio.play().catch(() => setTimeout(nextRandom, 200));
-    }
-  }
-  // Poll progress for YouTube
-  setInterval(() => {
-    if (state.audioEngine !== 'yt' || !state.ytPlayer?.getCurrentTime) return;
-    const cur = state.ytPlayer.getCurrentTime() || 0;
-    const tot = state.ytPlayer.getDuration() || 0;
-    setProgress(cur, tot);
-  }, 500);
+  });
+  audio.addEventListener('error', () => {
+    showToast('Couldn’t play that one · skipping');
+    setTimeout(nextRandom, 200);
+  });
 
   /* ---------- Playback ---------- */
   function play(song, opts = {}) {
     if (!song) return;
     if (state.current) state.history.push(state.current.id);
     state.current = song;
-
     $('vinyl-stage').classList.add('spinning');
     setTimeout(() => $('vinyl-stage').classList.remove('spinning'), 800);
-
     state.isMystery = !!opts.mystery;
-
-    if (song.yt) {
-      // Use YouTube for full song
-      state.audioEngine = 'yt';
-      $('preview-tag').classList.add('hidden');
-      // Stop iTunes preview if running
-      audio.pause();
-      audio.removeAttribute('src');
-      audio.load();
-      if (!state.ytPlayer) createYtPlayer(song.yt);
-      else {
-        try { state.ytPlayer.loadVideoById(song.yt); }
-        catch (_) { createYtPlayer(song.yt); }
-      }
-    } else {
-      // Fall back to iTunes 30-sec preview
-      state.audioEngine = 'preview';
-      $('preview-tag').classList.remove('hidden');
-      if (state.ytPlayer) { try { state.ytPlayer.stopVideo(); } catch (_) {} }
-      audio.src = song.preview;
-      audio.play().catch(() => {});
-    }
-
+    audio.src = song.url;
+    audio.play().catch(() => {});
     renderNowPlaying();
     updateMediaSession(song);
   }
   function togglePlay() {
     if (!state.current) { nextRandom(); return; }
-    if (state.audioEngine === 'yt' && state.ytPlayer) {
-      try {
-        const s = state.ytPlayer.getPlayerState();
-        if (s === 1) state.ytPlayer.pauseVideo();
-        else state.ytPlayer.playVideo();
-      } catch (_) {}
-    } else {
-      if (audio.paused) audio.play().catch(() => {});
-      else audio.pause();
-    }
+    if (audio.paused) audio.play().catch(() => {});
+    else audio.pause();
   }
   function nextRandom(opts) {
     const next = pickRandom();
@@ -1146,10 +969,8 @@
       const id = state.history.pop();
       const s = state.catalog.find((x) => x.id === id);
       if (s) { state.current = null; play(s); }
-    } else if (state.audioEngine === 'preview') {
+    } else {
       audio.currentTime = 0;
-    } else if (state.ytPlayer?.seekTo) {
-      try { state.ytPlayer.seekTo(0, true); } catch (_) {}
     }
   }
 
@@ -1212,15 +1033,10 @@
   }
   function refreshChips() {
     $('shuffle-mega').disabled = !pool().length;
-    $('shuffle-label').textContent = pool().length ? 'Shuffle' : 'No songs · check connection';
+    $('shuffle-label').textContent = pool().length ? 'Shuffle' : 'No songs · refresh later';
   }
-
-  /* Highlight the era chip that matches the currently playing song.
-     Behavior:
-       - User filter ('All' default, or a specific era): drives the pool
-       - Visual highlight: when filter='all' AND something is playing,
-         highlight the era of that song so the user can see "I'm listening
-         to a 90s song right now". Otherwise highlight matches the filter. */
+  /* When filter is 'all' and a song is playing, the era chip auto-highlights
+     to match the current song's era. Click any chip to pin the filter. */
   function syncDialHighlight() {
     let active = state.era;
     if (state.era === 'all' && state.current && state.current.era && state.current.era !== 'all') {
@@ -1246,8 +1062,7 @@
         title: s.title, artist: s.artist,
         album: s.movie || 'Telugu',
         artwork: [
-          { src: (s.cover || '').replace(/\/\d+x\d+bb\./, '/300x300bb.'), sizes: '300x300', type: 'image/jpeg' },
-          { src: s.cover, sizes: '1000x1000', type: 'image/jpeg' },
+          { src: s.cover, sizes: '500x500', type: 'image/jpeg' },
         ],
       });
     } catch (_) {}
@@ -1271,12 +1086,11 @@
     }
   }
 
-  /* ---------- Card swipe (touch) ---------- */
+  /* ---------- Card swipe ---------- */
   function wireSwipe() {
     const card = $('vinyl-wrap');
-    let startX = 0, startY = 0, dx = 0, dy = 0, swiping = false;
     const stage = $('vinyl-stage');
-
+    let startX = 0, startY = 0, dx = 0, dy = 0, swiping = false;
     function onStart(e) {
       const t = e.touches ? e.touches[0] : e;
       startX = t.clientX; startY = t.clientY; dx = 0; dy = 0; swiping = true;
@@ -1287,7 +1101,6 @@
       const t = e.touches ? e.touches[0] : e;
       dx = t.clientX - startX;
       dy = t.clientY - startY;
-      // If user is scrolling vertically more than horizontally, abort
       if (Math.abs(dy) > Math.abs(dx) * 1.4) { onCancel(); return; }
       stage.style.transform = `translateX(${dx * 0.5}px)`;
       stage.style.opacity = String(Math.max(0.5, 1 - Math.abs(dx) / 300));
@@ -1309,13 +1122,10 @@
       stage.style.transform = '';
       stage.style.opacity = '';
     }
-
     card.addEventListener('touchstart', onStart, { passive: true });
     card.addEventListener('touchmove', onMove, { passive: true });
     card.addEventListener('touchend', onEnd);
     card.addEventListener('touchcancel', onCancel);
-
-    // mouse support too — drag the disc on desktop
     let mouseDown = false;
     card.addEventListener('mousedown', (e) => { mouseDown = true; onStart(e); });
     card.addEventListener('mousemove', (e) => { if (mouseDown) onMove(e); });
@@ -1326,7 +1136,6 @@
   /* ---------- Wire UI ---------- */
   document.querySelectorAll('.dial button').forEach((btn) => {
     btn.addEventListener('click', () => {
-      // User explicitly chose an era — set filter and update highlight.
       state.era = btn.dataset.era;
       document.querySelectorAll('.dial button').forEach((b) => b.setAttribute('aria-pressed', 'false'));
       btn.setAttribute('aria-pressed', 'true');
@@ -1360,20 +1169,12 @@
   $('progress').addEventListener('click', (ev) => {
     const rect = ev.currentTarget.getBoundingClientRect();
     const pct = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
-    if (state.audioEngine === 'preview' && audio.duration) {
-      audio.currentTime = pct * audio.duration;
-    } else if (state.audioEngine === 'yt' && state.ytPlayer?.getDuration) {
-      try { state.ytPlayer.seekTo(pct * state.ytPlayer.getDuration(), true); } catch (_) {}
-    }
+    if (audio.duration) audio.currentTime = pct * audio.duration;
   });
   $('progress').addEventListener('keydown', (e) => {
     const dir = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
-    if (!dir) return;
-    if (state.audioEngine === 'preview' && audio.duration) {
-      audio.currentTime = Math.max(0, Math.min(audio.duration, audio.currentTime + dir * 2));
-    } else if (state.audioEngine === 'yt' && state.ytPlayer?.getCurrentTime) {
-      try { state.ytPlayer.seekTo(state.ytPlayer.getCurrentTime() + dir * 5, true); } catch (_) {}
-    }
+    if (!dir || !audio.duration) return;
+    audio.currentTime = Math.max(0, Math.min(audio.duration, audio.currentTime + dir * 5));
     e.preventDefault();
   });
   window.addEventListener('keydown', (e) => {
@@ -1391,15 +1192,13 @@
   wireMediaSession();
   wireSwipe();
 
-  // Pre-warm YT API in parallel — first shuffle is instant
-  loadYTAPI();
-
   loadCatalog().then((cat) => {
     state.catalog = cat;
     refreshChips();
     $('booting').classList.add('hidden');
     if (!cat.length) {
-      showToast('Couldn’t load catalogue · check connection', 5000);
+      $('shuffle-label').textContent = 'Catalog updating';
+      showToast('Catalogue is being built · check back in a few minutes', 5000);
     }
   }).catch(() => {
     $('booting').classList.add('hidden');
