@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
 <meta name="theme-color" content="#050309" />
 <title>Yadrcha · Random Telugu Music</title>
 
@@ -11,6 +11,8 @@
 <link rel="preconnect" href="https://itunes.apple.com" />
 <link rel="preconnect" href="https://audio-ssl.itunes.apple.com" />
 <link rel="preconnect" href="https://is1-ssl.mzstatic.com" />
+<link rel="preconnect" href="https://www.youtube.com" />
+<link rel="preconnect" href="https://i.ytimg.com" />
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Righteous&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet" />
 
 <style>
@@ -36,16 +38,22 @@
   }
 
   *, *::before, *::after { box-sizing: border-box; }
-  html, body { height: 100%; }
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
   body {
     margin: 0;
     font-family: "Poppins", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     color: var(--fg);
     background: #02010a;
-    overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
-    min-height: 100dvh;
+    height: 100dvh;
+    width: 100vw;
+    position: fixed;
+    inset: 0;
   }
   button { font: inherit; color: inherit; cursor: pointer; }
   ::selection { background: var(--hot); color: #fff; }
@@ -68,31 +76,34 @@
   }
 
   .stage {
-    min-height: 100dvh;
+    height: 100dvh;
+    width: 100vw;
     display: grid;
     place-items: center;
-    padding: 24px 16px;
+    overflow: hidden;
   }
   .phone {
     position: relative;
     width: 100%;
     max-width: 420px;
+    height: min(900px, 100dvh - 32px);
     background: var(--phone-bezel);
-    border-radius: 56px;
-    padding: 14px;
+    border-radius: 44px;
+    padding: 12px;
     box-shadow:
       inset 0 0 0 2px rgba(255,255,255,0.07),
       inset 0 0 0 4px rgba(255,255,255,0.02),
       0 0 0 1px rgba(255,255,255,0.04),
       0 70px 140px -40px rgba(0,0,0,0.8),
       0 30px 60px -20px rgba(0,0,0,0.6);
+    margin: 16px;
   }
   .phone::before {
     content: "";
     position: absolute;
-    top: 26px; left: 50%;
+    top: 22px; left: 50%;
     transform: translateX(-50%);
-    width: 108px; height: 30px;
+    width: 100px; height: 26px;
     background: #000;
     border-radius: 999px;
     z-index: 100;
@@ -101,19 +112,28 @@
   .phone-screen {
     position: relative;
     background: var(--phone-screen);
-    border-radius: 44px;
+    border-radius: 34px;
     overflow: hidden;
-    min-height: 760px;
     isolation: isolate;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
   }
+
+  /* MOBILE: full screen, no frame, no scroll */
   @media (max-width: 640px) {
-    .stage { padding: 0; }
     .phone {
-      max-width: none; border-radius: 0; padding: 0;
-      box-shadow: none; min-height: 100dvh;
+      max-width: none;
+      width: 100vw;
+      height: 100dvh;
+      margin: 0;
+      border-radius: 0;
+      padding: 0;
+      box-shadow: none;
     }
     .phone::before { display: none; }
-    .phone-screen { border-radius: 0; min-height: 100dvh; }
+    .phone-screen { border-radius: 0; }
   }
 
   .inner-bg {
@@ -137,28 +157,37 @@
   .screen-pad {
     position: relative;
     z-index: 1;
-    padding: 70px 22px 32px;
+    padding: 56px 18px 16px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
   }
+  @media (max-width: 640px) {
+    .screen-pad { padding: env(safe-area-inset-top, 28px) 18px env(safe-area-inset-bottom, 16px); padding-top: 28px; }
+  }
+
   .top-row {
     display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 18px;
+    margin-bottom: 12px;
+    flex-shrink: 0;
   }
   .brand-mark {
     display: flex; align-items: center; gap: 10px;
     font-family: "Righteous";
-    font-size: 14px; letter-spacing: 1.5px;
+    font-size: 13px; letter-spacing: 1.5px;
   }
   .brand-mark .logo {
-    width: 30px; height: 30px;
+    width: 28px; height: 28px;
     border-radius: 9px;
     display: grid; place-items: center;
     background: linear-gradient(135deg, var(--hot), var(--indigo) 60%, var(--teal));
     box-shadow: 0 6px 18px -4px rgba(236,72,153,.6);
   }
-  .brand-mark .logo svg { width: 16px; height: 16px; color: #fff; }
+  .brand-mark .logo svg { width: 14px; height: 14px; color: #fff; }
   .icon-btn {
     appearance: none; border: none; background: var(--surface);
-    width: 36px; height: 36px;
+    width: 34px; height: 34px;
     border-radius: 10px;
     display: grid; place-items: center;
     color: var(--fg);
@@ -167,24 +196,25 @@
   }
   .icon-btn:hover { background: var(--surface-strong); }
   .icon-btn:active { transform: scale(0.95); }
-  .icon-btn svg { width: 16px; height: 16px; }
+  .icon-btn svg { width: 15px; height: 15px; }
 
   .mood {
     display: flex; align-items: center; gap: 8px;
-    padding: 9px 14px;
+    padding: 6px 12px;
     border-radius: 999px;
     background: var(--surface);
     border: 1px solid var(--border);
     backdrop-filter: blur(12px);
-    margin: 0 auto 22px;
+    margin: 0 auto 12px;
     width: fit-content;
-    font-size: 11px;
+    font-size: 10px;
     letter-spacing: 1.4px;
     text-transform: uppercase;
     color: var(--fg-muted);
+    flex-shrink: 0;
   }
   .mood .pulse {
-    width: 7px; height: 7px; border-radius: 50%;
+    width: 6px; height: 6px; border-radius: 50%;
     background: var(--accent);
     box-shadow: 0 0 10px var(--accent);
   }
@@ -196,69 +226,81 @@
     50%      { transform: scale(1.4); opacity: .55; }
   }
 
-  /* VINYL + TONEARM */
+  /* VINYL DISC — poster fills the entire face */
   .vinyl-wrap {
     position: relative;
     width: 100%;
-    max-width: 320px;
-    margin: 0 auto 22px;
-    padding: 28px 28px 0 0;
+    margin: 0 auto 14px;
+    padding: 24px 24px 0 0;
+    flex-shrink: 0;
+    user-select: none;
+    touch-action: pan-y;
   }
   .vinyl-stage {
     position: relative;
     width: 100%;
     aspect-ratio: 1;
+    max-height: min(40vh, 320px);
+    margin: 0 auto;
+    /* Match aspect-ratio to actual displayed size */
+    max-width: min(40vh, 320px);
   }
   .vinyl {
     position: absolute; inset: 0;
     border-radius: 50%;
-    background:
-      repeating-radial-gradient(circle at center,
-        #0a0a0a 0px, #0a0a0a 1px,
-        #15151a 1px, #15151a 3px),
-      radial-gradient(circle at 30% 30%, #2a2a30 0%, #0a0a0a 60%);
+    background: #0a0a0a;
+    overflow: hidden;
     box-shadow:
       0 30px 80px -20px rgba(0,0,0,0.9),
-      inset 0 0 0 2px rgba(255,255,255,0.04);
+      inset 0 0 0 2px rgba(0,0,0,0.6);
     transition: transform var(--t-med);
   }
   .vinyl-art {
     position: absolute;
-    inset: 28%;
+    inset: 4%;
     border-radius: 50%;
     background-color: #1a1525;
     background-size: cover;
     background-position: center;
     box-shadow:
-      inset 0 0 0 4px rgba(0,0,0,0.4),
-      inset 0 0 0 5px rgba(255,255,255,0.06);
+      inset 0 0 0 2px rgba(0,0,0,0.5),
+      inset 0 0 30px rgba(0,0,0,0.3);
   }
-  .vinyl-art::after {
-    content: "";
+  .vinyl-spindle {
     position: absolute;
-    inset: 47%;
-    background: radial-gradient(circle, #3a3340 0%, #0a0610 60%);
+    top: 50%; left: 50%;
+    width: 8%; height: 8%;
+    transform: translate(-50%, -50%);
     border-radius: 50%;
-    box-shadow: 0 0 0 1px rgba(255,255,255,0.08);
-  }
-  .vinyl-shimmer {
-    position: absolute;
-    inset: 28%;
-    border-radius: 50%;
-    background: linear-gradient(135deg, transparent 30%, rgba(255,255,255,0.18) 50%, transparent 70%);
+    background: radial-gradient(circle at 30% 30%, #4a4250 0%, #0a0610 70%);
+    box-shadow:
+      0 0 0 3px rgba(0,0,0,0.6),
+      0 0 0 4px rgba(255,255,255,0.04);
     pointer-events: none;
-    opacity: 0.5;
+    z-index: 2;
+  }
+  .vinyl-shine {
+    position: absolute;
+    inset: 4%;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.18) 0%, transparent 40%);
+    pointer-events: none;
+    opacity: 0.7;
   }
   @media (prefers-reduced-motion: no-preference) {
-    .playing .vinyl { animation: spin 12s linear infinite; }
+    .playing .vinyl { animation: spin 18s linear infinite; }
     .spinning .vinyl { animation: spin 0.8s cubic-bezier(.5,.05,.5,.95) 1; }
   }
-  @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+  @keyframes spin {
+    from { transform: rotate(0); }
+    to   { transform: rotate(360deg); }
+  }
 
+  /* TONEARM — properly positioned above-right */
   .tonearm {
     position: absolute;
     top: 0; right: 0;
-    width: 56px;
+    width: 50px;
     height: 78%;
     pointer-events: none;
     z-index: 5;
@@ -266,7 +308,7 @@
   .tonearm .pivot {
     position: absolute;
     top: 0; right: 0;
-    width: 32px; height: 32px;
+    width: 28px; height: 28px;
     border-radius: 50%;
     background: radial-gradient(circle at 30% 30%, #d1d5db 0%, #4b5563 50%, #1f2937 100%);
     box-shadow:
@@ -278,16 +320,16 @@
   .tonearm .pivot::after {
     content: "";
     position: absolute;
-    inset: 8px;
+    inset: 7px;
     border-radius: 50%;
     background: radial-gradient(circle at 30% 30%, #6b7280, #111827);
   }
   .tonearm .arm {
     position: absolute;
-    top: 16px;
-    right: 16px;
-    width: 5px;
-    height: calc(100% - 16px);
+    top: 14px;
+    right: 14px;
+    width: 4px;
+    height: calc(100% - 14px);
     background: linear-gradient(180deg, #d1d5db 0%, #6b7280 80%, #374151 100%);
     border-radius: 999px;
     transform-origin: top center;
@@ -299,9 +341,9 @@
   .tonearm .arm::before {
     content: "";
     position: absolute;
-    top: -12px; left: 50%;
+    top: -10px; left: 50%;
     transform: translateX(-50%);
-    width: 16px; height: 14px;
+    width: 14px; height: 12px;
     border-radius: 4px 4px 999px 999px;
     background: linear-gradient(180deg, #1f2937, #0f172a);
     box-shadow: 0 2px 4px rgba(0,0,0,0.5);
@@ -309,9 +351,9 @@
   .tonearm .arm::after {
     content: "";
     position: absolute;
-    bottom: -8px; left: 50%;
+    bottom: -6px; left: 50%;
     transform: translateX(-50%) rotate(-10deg);
-    width: 24px; height: 16px;
+    width: 20px; height: 14px;
     background: linear-gradient(180deg, #1f2937 0%, #0a0e1a 100%);
     border-radius: 4px;
     box-shadow:
@@ -319,14 +361,15 @@
       inset 0 1px 0 rgba(255,255,255,0.15);
   }
 
-  .meta { text-align: center; margin-bottom: 18px; padding: 0 8px; }
+  /* META */
+  .meta { text-align: center; margin-bottom: 10px; padding: 0 8px; flex-shrink: 0; }
   .meta .movie {
-    font-size: 10px;
+    font-size: 9px;
     letter-spacing: 1.8px;
     text-transform: uppercase;
     color: var(--gold);
-    margin-bottom: 8px;
-    min-height: 13px;
+    margin-bottom: 4px;
+    min-height: 12px;
     transition: opacity var(--t-med);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -335,20 +378,20 @@
   .meta .title {
     font-family: "DM Serif Display";
     font-style: italic;
-    font-size: 22px;
+    font-size: 19px;
     line-height: 1.15;
-    margin: 0 0 8px;
+    margin: 0 0 4px;
     word-break: break-word;
     transition: opacity var(--t-med);
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
-    min-height: 50px;
+    min-height: 44px;
   }
   .meta .artist {
     color: var(--fg-muted);
-    font-size: 12px;
+    font-size: 11px;
     margin: 0;
     transition: opacity var(--t-med);
     overflow: hidden;
@@ -359,7 +402,8 @@
   .meta.revealing .title,
   .meta.revealing .artist { opacity: 0.15; filter: blur(8px); }
 
-  .progress-wrap { padding: 0 4px; margin-bottom: 12px; }
+  /* PROGRESS */
+  .progress-wrap { padding: 0 4px; margin-bottom: 8px; flex-shrink: 0; }
   .progress {
     position: relative;
     height: 4px;
@@ -389,45 +433,48 @@
   .times {
     display: flex; justify-content: space-between;
     font-variant-numeric: tabular-nums;
-    font-size: 10px;
+    font-size: 9px;
     color: var(--fg-dim);
-    margin-top: 6px;
+    margin-top: 4px;
     letter-spacing: 0.5px;
   }
   .preview-tag {
     display: inline-block;
-    font-size: 9px;
-    letter-spacing: 1.4px;
+    font-size: 8px;
+    letter-spacing: 1.2px;
     color: var(--fg-dim);
     background: var(--surface);
-    padding: 2px 8px;
+    padding: 1px 6px;
     border-radius: 999px;
-    margin-left: 8px;
+    margin-left: 6px;
     text-transform: uppercase;
   }
+  .preview-tag.hidden { display: none; }
 
+  /* CONTROLS */
   .controls {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
-    gap: 8px;
+    gap: 6px;
     align-items: center;
-    margin-bottom: 22px;
+    margin-bottom: 12px;
+    flex-shrink: 0;
   }
   .ctrl {
     appearance: none; border: none; background: transparent;
     color: var(--fg);
-    width: 100%; height: 44px;
-    border-radius: 14px;
+    width: 100%; height: 40px;
+    border-radius: 12px;
     display: grid; place-items: center;
     transition: background var(--t-fast), transform var(--t-fast), color var(--t-fast);
   }
   .ctrl:hover { background: var(--surface); }
   .ctrl:active { transform: scale(0.92); }
-  .ctrl svg { width: 20px; height: 20px; }
+  .ctrl svg { width: 18px; height: 18px; }
   .ctrl:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .ctrl.liked { color: var(--hot); }
   .ctrl.play {
-    height: 56px;
+    height: 50px;
     background: radial-gradient(circle at 30% 30%, #34d399 0%, #16a34a 60%, #047857 100%);
     color: #07050f;
     box-shadow:
@@ -437,7 +484,7 @@
     overflow: hidden;
   }
   .ctrl.play:hover { transform: scale(1.04); }
-  .ctrl.play svg { width: 24px; height: 24px; }
+  .ctrl.play svg { width: 22px; height: 22px; }
   .spin-burst { animation: spin-burst 0.7s cubic-bezier(.5,.05,.5,.95) 1; }
   @keyframes spin-burst {
     0%   { transform: rotate(0) scale(1); }
@@ -458,20 +505,21 @@
     100% { transform: translate(var(--dx, 20px), -80px) scale(1.2); opacity: 0; }
   }
 
-  .dial-wrap { margin-bottom: 18px; }
+  /* DIAL */
+  .dial-wrap { margin-bottom: 10px; flex-shrink: 0; }
   .dial-label {
-    font-size: 10px;
+    font-size: 9px;
     letter-spacing: 1.6px;
     text-transform: uppercase;
     color: var(--fg-dim);
     text-align: center;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
   }
   .dial {
     display: flex;
     justify-content: space-between;
-    gap: 4px;
-    padding: 4px;
+    gap: 3px;
+    padding: 3px;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 999px;
@@ -482,13 +530,13 @@
     appearance: none; border: none;
     background: transparent;
     color: var(--fg-muted);
-    padding: 8px 4px;
+    padding: 6px 4px;
     border-radius: 999px;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
     letter-spacing: 0.4px;
     transition: background var(--t-fast), color var(--t-fast), transform var(--t-fast);
-    min-height: 32px;
+    min-height: 28px;
     white-space: nowrap;
   }
   .dial button:hover { color: var(--fg); }
@@ -499,24 +547,26 @@
   }
   .dial button:active { transform: scale(0.96); }
 
+  /* SHUFFLE BUTTON */
   .shuffle-mega {
     position: relative;
     appearance: none; border: none;
     width: 100%;
-    padding: 16px 18px;
+    padding: 13px 18px;
     border-radius: 999px;
     background: linear-gradient(135deg, #ec4899 0%, #6366f1 50%, #14b8a6 100%);
     color: #fff;
     font-family: "Righteous";
-    font-size: 14px;
+    font-size: 13px;
     letter-spacing: 3px;
     text-transform: uppercase;
     box-shadow:
-      0 16px 40px -10px rgba(99,102,241,0.6),
+      0 14px 36px -10px rgba(99,102,241,0.6),
       inset 0 1px 0 rgba(255,255,255,0.2);
     transition: transform var(--t-fast), box-shadow var(--t-fast);
     overflow: hidden;
-    display: flex; align-items: center; justify-content: center; gap: 12px;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    flex-shrink: 0;
   }
   .shuffle-mega:hover { transform: translateY(-2px); }
   .shuffle-mega:active { transform: scale(0.98); }
@@ -526,7 +576,7 @@
     box-shadow: none;
     color: var(--fg-dim);
   }
-  .shuffle-mega svg { width: 18px; height: 18px; }
+  .shuffle-mega svg { width: 16px; height: 16px; }
   .shuffle-mega::before {
     content: "";
     position: absolute; inset: 0;
@@ -538,13 +588,13 @@
 
   .toast {
     position: absolute;
-    top: 72px; left: 50%;
+    top: 56px; left: 50%;
     transform: translate(-50%, -120%);
     background: var(--surface-strong);
     border: 1px solid var(--border-strong);
     backdrop-filter: blur(20px);
     border-radius: 999px;
-    padding: 8px 14px;
+    padding: 7px 14px;
     font-size: 11px;
     z-index: 150;
     transition: transform var(--t-med);
@@ -562,7 +612,7 @@
     backdrop-filter: blur(20px);
   }
   .booting.hidden { display: none; }
-  .boot-card { text-align: center; padding: 24px; max-width: 320px; }
+  .boot-card { text-align: center; padding: 20px; max-width: 280px; }
   .boot-card h3 {
     font-family: "DM Serif Display";
     font-style: italic;
@@ -575,29 +625,29 @@
   .boot-card p {
     font-size: 12px;
     color: var(--fg-muted);
-    margin: 0 0 16px;
+    margin: 0 0 14px;
   }
   .boot-spinner {
-    width: 36px; height: 36px;
-    margin: 0 auto 14px;
+    width: 32px; height: 32px;
+    margin: 0 auto 12px;
     border: 3px solid var(--surface);
     border-top-color: var(--hot);
     border-radius: 50%;
     animation: spin 1s linear infinite;
   }
-  .boot-progress {
-    width: 100%;
-    height: 3px;
-    background: var(--surface);
-    border-radius: 999px;
-    overflow: hidden;
-    margin-top: 12px;
+
+  /* swipe nudge feedback */
+  .vinyl-stage.swiping {
+    transition: transform 200ms ease-out;
   }
-  .boot-progress .bar {
-    height: 100%;
-    width: 0%;
-    background: linear-gradient(90deg, #ec4899, #6366f1, #14b8a6);
-    transition: width 200ms ease-out;
+  .vinyl-stage.swipe-left  { transform: translateX(-30px); opacity: 0.7; }
+  .vinyl-stage.swipe-right { transform: translateX(30px); opacity: 0.7; }
+
+  /* hidden YT iframe */
+  #yt-frame {
+    position: absolute; width: 1px; height: 1px;
+    opacity: 0; pointer-events: none;
+    left: -9999px; top: -9999px;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -648,12 +698,13 @@
           <span id="mood-text">Tuning the dial…</span>
         </div>
 
-        <div class="vinyl-wrap">
+        <div class="vinyl-wrap" id="vinyl-wrap">
           <div class="vinyl-stage" id="vinyl-stage">
             <div class="vinyl" id="vinyl">
               <div class="vinyl-art" id="vinyl-art"></div>
-              <div class="vinyl-shimmer" aria-hidden="true"></div>
+              <div class="vinyl-shine" aria-hidden="true"></div>
             </div>
+            <div class="vinyl-spindle" aria-hidden="true"></div>
           </div>
           <div class="tonearm" aria-hidden="true">
             <div class="pivot"></div>
@@ -675,7 +726,7 @@
           </div>
           <div class="times">
             <span id="time-cur">0:00</span>
-            <span><span id="time-tot">0:30</span><span class="preview-tag">Preview</span></span>
+            <span><span id="time-tot">0:00</span><span class="preview-tag hidden" id="preview-tag">Preview</span></span>
           </div>
         </div>
 
@@ -733,8 +784,7 @@
         <div class="boot-card">
           <div class="boot-spinner" aria-hidden="true"></div>
           <h3>Tuning the dial…</h3>
-          <p id="boot-status">Searching the Telugu catalogue</p>
-          <div class="boot-progress"><div class="bar" id="boot-bar"></div></div>
+          <p id="boot-status">Loading the Telugu catalogue</p>
         </div>
       </div>
     </div>
@@ -742,47 +792,35 @@
 </div>
 
 <audio id="audio" preload="auto"></audio>
+<div id="yt-frame"><div id="yt-host"></div></div>
 
 <script>
-/* ===========================================================
+/* ============================================================
    YADRCHA — Random Telugu Music
-   - Source: Apple iTunes Search API (free, public, CORS-enabled,
-             works on file:// / Cloudflare Pages / any host)
-   - Catalogue: 50 parallel queries → 1500-2500 unique songs
-   - Cache: 7-day localStorage (instant subsequent loads)
-   - Background refresh: silently fetches more after using cache
-   - Era filtering: by releaseDate year (real, not playlist guess)
-   =========================================================== */
+   - Catalog: catalog.json in repo (maintained by GitHub Action)
+   - Audio: hidden YouTube IFrame for full songs (preferred),
+            HTML5 audio with iTunes 30s preview as fallback.
+   - Metadata: iTunes Search API (movie poster, title, year)
+   - On HTTPS (GitHub Pages), YT IFrame autoplay works fine.
+   ============================================================ */
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
 
-  /* ---------- Config ---------- */
-  // 50 diverse search terms covering composers, singers, movies,
-  // eras, and genres. Each returns up to 200 songs from iTunes →
-  // after dedupe ~1500-2500 unique Telugu film tracks.
-  const QUERIES = [
-    // Composers / music directors
-    'ilaiyaraaja telugu', 'ar rahman telugu', 'devi sri prasad', 'thaman s telugu',
-    'anirudh telugu', 'mickey j meyer', 'harris jayaraj telugu', 'vidyasagar telugu',
-    'koti telugu', 'raj koti', 'm m keeravani', 'ramana gogula',
-    // Singers
-    'ghantasala telugu', 'spb telugu', 'sid sriram telugu', 'shreya ghoshal telugu',
-    'kk telugu', 'sonu nigam telugu', 'javed ali telugu', 'chinmayi telugu',
-    'sunitha telugu', 'armaan malik telugu', 'karthik telugu', 'haricharan telugu',
-    // Famous movies
-    'pushpa telugu', 'baahubali', 'rrr telugu', 'magadheera', 'eega telugu',
-    'arjun reddy', 'jersey telugu', 'fidaa telugu', 'ala vaikunthapurramuloo',
-    'sarrainodu', 'saaho', 'athadu telugu', 'okkadu telugu', 'pokiri telugu',
-    'khaidi telugu', 'sye raa', 'maharshi telugu',
-    // Generic / era keywords
-    'telugu hits', 'tollywood songs', 'telugu romantic', 'telugu folk',
-    'telugu old songs', 'telugu super hit', 'telugu melody', 'telugu dance',
-    'telugu 1990', 'telugu 2000', 'telugu 2010', 'telugu 2020',
+  // Cutoff for "Latest" era — past N years, including current year
+  const NOW_YEAR = new Date().getFullYear();
+  const LATEST_FROM_YEAR = NOW_YEAR - 2;   // 2024+ when current year is 2026
+
+  // Live iTunes fallback queries when catalog.json is empty/stale
+  const FALLBACK_QUERIES = [
+    'telugu hits', 'tollywood songs', 'telugu romantic', 'telugu old songs',
+    'devi sri prasad', 'thaman s telugu', 'anirudh telugu', 'sid sriram telugu',
+    'ar rahman telugu', 'ilaiyaraaja telugu', 'spb telugu', 'shreya ghoshal telugu',
+    'telugu 2024', 'telugu 2025', 'pushpa telugu', 'baahubali',
   ];
 
-  const CACHE_KEY = 'yadrcha.catalog.v2';
-  const CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
+  const CACHE_KEY = 'yadrcha.catalog.v3';
+  const CACHE_TTL = 24 * 60 * 60 * 1000; // 1 day; catalog.json updates daily anyway
 
   /* ---------- State ---------- */
   const state = {
@@ -791,8 +829,11 @@
     history: [],
     era: 'all',
     isPlaying: false,
-    likes: new Set(JSON.parse(localStorage.getItem('yadrcha.likes') || '[]')),
     isMystery: false,
+    likes: new Set(JSON.parse(localStorage.getItem('yadrcha.likes') || '[]')),
+    ytPlayer: null,
+    ytReady: false,
+    audioEngine: null, // 'yt' | 'preview' | null
   };
 
   /* ---------- Utils ---------- */
@@ -800,14 +841,13 @@
     if (!isFinite(t) || t < 0) t = 0;
     return Math.floor(t / 60) + ':' + Math.floor(t % 60).toString().padStart(2, '0');
   };
-  const pickEra = (year) => {
+  function pickEra(year) {
     if (!year) return 'all';
     if (year < 1990) return 'vintage';
     if (year < 2000) return '90s';
-    if (year < 2010) return '2000s';
-    if (year < 2020) return '2010s';
-    return 'latest';
-  };
+    if (year >= LATEST_FROM_YEAR) return 'latest';
+    return '2000s'; // 2000 through (LATEST_FROM_YEAR - 1)
+  }
   function showToast(msg, ms = 2200) {
     const t = $('toast');
     t.textContent = msg;
@@ -831,103 +871,104 @@
     document.documentElement.style.setProperty('--gold', m.accent);
   }
 
-  /* ---------- Cache ---------- */
-  function loadCache() {
+  /* ---------- Catalog load ----------
+     Order of preference:
+       1. catalog.json from the repo (populated by GH Action)
+       2. localStorage cache
+       3. Live iTunes search (cold-start fallback) */
+  async function loadCatalog() {
+    // 1. catalog.json
+    try {
+      const url = new URL('catalog.json', location.href).href + '?t=' + Date.now();
+      const r = await fetch(url, { cache: 'no-cache' });
+      if (r.ok) {
+        const data = await r.json();
+        if (data && Array.isArray(data.songs) && data.songs.length > 50) {
+          return expandCatalog(data.songs);
+        }
+      }
+    } catch (_) {}
+
+    // 2. localStorage cache
     try {
       const raw = localStorage.getItem(CACHE_KEY);
-      if (!raw) return null;
-      const obj = JSON.parse(raw);
-      if (!obj || !obj.ts || !Array.isArray(obj.data)) return null;
-      if (Date.now() - obj.ts > CACHE_TTL) return null;
-      return obj.data;
-    } catch (_) { return null; }
+      if (raw) {
+        const obj = JSON.parse(raw);
+        if (obj && Date.now() - obj.ts < CACHE_TTL && Array.isArray(obj.data) && obj.data.length > 50) {
+          return expandCatalog(obj.data);
+        }
+      }
+    } catch (_) {}
+
+    // 3. Live iTunes
+    return await liveItunes();
   }
-  function saveCache(catalog) {
-    try {
-      // Strip cover URLs (we'll regenerate from artHd) to save space
-      const slim = catalog.map((s) => ({
-        i: s.id, t: s.title, a: s.artist, m: s.movie,
-        u: s.preview, c: s.artHd, y: s.year, d: s.duration,
-      }));
-      localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: slim }));
-    } catch (e) {
-      // Quota exceeded — clear and retry with smaller subset
-      try {
-        localStorage.removeItem(CACHE_KEY);
-        localStorage.setItem(CACHE_KEY, JSON.stringify({
-          ts: Date.now(),
-          data: catalog.slice(0, 800).map((s) => ({
-            i: s.id, t: s.title, a: s.artist, m: s.movie,
-            u: s.preview, c: s.artHd, y: s.year, d: s.duration,
-          })),
-        }));
-      } catch (_) {}
-    }
-  }
-  function expandCache(slim) {
+
+  function expandCatalog(slim) {
     return slim.map((s) => ({
-      id: s.i, title: s.t, artist: s.a, movie: s.m,
-      preview: s.u, artHd: s.c, art: s.c, year: s.y,
-      era: pickEra(s.y), duration: s.d,
+      id: s.i,
+      title: s.t,
+      artist: s.a,
+      movie: s.m,
+      preview: s.u,
+      cover: s.c,
+      year: s.y,
+      duration: s.d,
+      yt: s.yt || null,
+      bad: !!s.bad,
+      era: pickEra(s.y),
     }));
   }
 
-  /* ---------- iTunes fetch ---------- */
-  async function fetchQuery(q) {
-    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&entity=song&limit=200&country=in`;
+  function saveCache(slim) {
     try {
-      const res = await fetch(url, { mode: 'cors' });
-      if (!res.ok) return [];
-      const data = await res.json();
-      return data.results || [];
-    } catch (e) { return []; }
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: slim }));
+    } catch (e) {
+      try {
+        localStorage.removeItem(CACHE_KEY);
+        localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: slim.slice(0, 800) }));
+      } catch (_) {}
+    }
   }
-  function normalize(track) {
-    if (!track || !track.previewUrl) return null;
-    if (track.primaryGenreName !== 'Telugu') return null;
-    const year = track.releaseDate ? parseInt(track.releaseDate.slice(0, 4)) : null;
-    const art100 = track.artworkUrl100 || '';
-    const artHd = art100.replace(/\/\d+x\d+bb\./, '/1000x1000bb.');
-    return {
-      id: track.trackId,
-      title: track.trackName,
-      artist: track.artistName,
-      movie: (track.collectionName || '')
-        .replace(/\s*\([^)]*soundtrack[^)]*\)\s*$/i, '')
-        .replace(/\s*-\s*single\s*$/i, ''),
-      preview: track.previewUrl,
-      art: art100, artHd,
-      year, era: pickEra(year),
-      duration: track.trackTimeMillis ? track.trackTimeMillis / 1000 : 30,
-    };
-  }
-  async function loadCatalog(onProgress) {
-    let done = 0;
-    const lists = await Promise.all(QUERIES.map(async (q) => {
-      const r = await fetchQuery(q);
-      done++;
-      if (onProgress) onProgress(done, QUERIES.length);
-      return r;
+
+  async function liveItunes() {
+    const lists = await Promise.all(FALLBACK_QUERIES.map(async (q) => {
+      try {
+        const url = `https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&entity=song&limit=200&country=in`;
+        const r = await fetch(url, { mode: 'cors' });
+        if (!r.ok) return [];
+        const data = await r.json();
+        return data.results || [];
+      } catch (_) { return []; }
     }));
     const seen = new Set();
     const out = [];
-    lists.flat().forEach((t) => {
-      const n = normalize(t);
-      if (!n) return;
-      if (seen.has(n.id)) return;
-      seen.add(n.id);
-      out.push(n);
+    lists.flat().forEach((track) => {
+      if (!track || !track.previewUrl) return;
+      if (track.primaryGenreName !== 'Telugu') return;
+      if (seen.has(track.trackId)) return;
+      seen.add(track.trackId);
+      const year = track.releaseDate ? parseInt(track.releaseDate.slice(0, 4)) : null;
+      out.push({
+        i: track.trackId,
+        t: (track.trackName || '').trim(),
+        a: (track.artistName || '').trim(),
+        m: (track.collectionName || '')
+          .replace(/\s*\([^)]*soundtrack[^)]*\)\s*$/i, '')
+          .replace(/\s*-\s*single\s*$/i, '').trim(),
+        u: track.previewUrl,
+        c: (track.artworkUrl100 || '').replace(/\/\d+x\d+bb\./, '/1000x1000bb.'),
+        y: year,
+        d: Math.round((track.trackTimeMillis || 30000) / 1000),
+      });
     });
-    return out;
+    saveCache(out);
+    return expandCatalog(out);
   }
 
   /* ---------- Pool / random ---------- */
   function pool() {
     if (state.era === 'all') return state.catalog;
-    if (state.era === 'latest') {
-      // Latest = 2010+ (so people see recent songs even if 2010s)
-      return state.catalog.filter((s) => s.year && s.year >= 2010);
-    }
     return state.catalog.filter((s) => s.era === state.era);
   }
   function pickRandom() {
@@ -939,25 +980,105 @@
     return choices[Math.floor(Math.random() * choices.length)];
   }
 
-  /* ---------- Audio engine ---------- */
+  /* ---------- Audio engine: hybrid YT + HTML5 audio ---------- */
   const audio = $('audio');
-  audio.addEventListener('play',  () => { state.isPlaying = true;  renderPlayState(); });
-  audio.addEventListener('pause', () => { state.isPlaying = false; renderPlayState(); });
-  audio.addEventListener('ended', () => { nextRandom(); });
+  audio.addEventListener('play',  () => { if (state.audioEngine === 'preview') { state.isPlaying = true;  renderPlayState(); } });
+  audio.addEventListener('pause', () => { if (state.audioEngine === 'preview') { state.isPlaying = false; renderPlayState(); } });
+  audio.addEventListener('ended', () => { if (state.audioEngine === 'preview') nextRandom(); });
   audio.addEventListener('timeupdate', () => {
+    if (state.audioEngine !== 'preview') return;
     const cur = audio.currentTime;
     const tot = audio.duration || 30;
+    setProgress(cur, tot);
+  });
+  audio.addEventListener('error', () => {
+    if (state.audioEngine === 'preview') {
+      showToast('Couldn’t play that one · skipping');
+      setTimeout(nextRandom, 200);
+    }
+  });
+
+  function setProgress(cur, tot) {
     const pct = tot > 0 ? (cur / tot) * 100 : 0;
     $('filled').style.width = pct + '%';
     $('thumb').style.left = pct + '%';
     $('time-cur').textContent = fmt(cur);
     $('time-tot').textContent = fmt(tot);
     $('progress').setAttribute('aria-valuenow', Math.round(pct));
-  });
-  audio.addEventListener('error', () => {
-    showToast('Couldn’t play that one · skipping');
-    setTimeout(nextRandom, 200);
-  });
+  }
+
+  // YouTube IFrame
+  function loadYTAPI() {
+    return new Promise((resolve) => {
+      if (window.YT && window.YT.Player) return resolve();
+      window.onYouTubeIframeAPIReady = () => resolve();
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      tag.onerror = () => resolve();
+      document.head.appendChild(tag);
+    });
+  }
+  function ensureYtHost() {
+    if (!$('yt-host')) {
+      const c = document.createElement('div');
+      c.id = 'yt-host';
+      $('yt-frame').appendChild(c);
+    }
+  }
+  function patchIframeAllow() {
+    setTimeout(() => {
+      const iframe = $('yt-frame').querySelector('iframe');
+      if (iframe) {
+        iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
+      }
+    }, 100);
+  }
+
+  function createYtPlayer(videoId) {
+    if (state.ytPlayer) {
+      try { state.ytPlayer.destroy(); } catch (_) {}
+      state.ytPlayer = null;
+    }
+    ensureYtHost();
+    state.ytPlayer = new YT.Player('yt-host', {
+      height: '1', width: '1',
+      videoId,
+      playerVars: {
+        autoplay: 1, controls: 0, disablekb: 1, modestbranding: 1,
+        playsinline: 1, rel: 0, fs: 0, iv_load_policy: 3,
+      },
+      events: {
+        onReady: (e) => { state.ytReady = true; try { e.target.playVideo(); } catch (_) {} },
+        onStateChange: onYtStateChange,
+        onError: onYtError,
+      },
+    });
+    patchIframeAllow();
+  }
+  function onYtStateChange(e) {
+    if (state.audioEngine !== 'yt') return;
+    if (e.data === 1) { state.isPlaying = true; renderPlayState(); }
+    else if (e.data === 2) { state.isPlaying = false; renderPlayState(); }
+    else if (e.data === 0) { nextRandom(); }
+  }
+  function onYtError(e) {
+    if (state.audioEngine !== 'yt') return;
+    console.warn('[yadrcha] YT error', e.data, '— falling back to preview');
+    // Fall back to iTunes preview for this song
+    if (state.current) {
+      state.audioEngine = 'preview';
+      $('preview-tag').classList.remove('hidden');
+      audio.src = state.current.preview;
+      audio.play().catch(() => setTimeout(nextRandom, 200));
+    }
+  }
+  // Poll progress for YouTube
+  setInterval(() => {
+    if (state.audioEngine !== 'yt' || !state.ytPlayer?.getCurrentTime) return;
+    const cur = state.ytPlayer.getCurrentTime() || 0;
+    const tot = state.ytPlayer.getDuration() || 0;
+    setProgress(cur, tot);
+  }, 500);
 
   /* ---------- Playback ---------- */
   function play(song, opts = {}) {
@@ -969,15 +1090,44 @@
     setTimeout(() => $('vinyl-stage').classList.remove('spinning'), 800);
 
     state.isMystery = !!opts.mystery;
-    audio.src = song.preview;
-    audio.play().catch(() => {});
+
+    if (song.yt) {
+      // Use YouTube for full song
+      state.audioEngine = 'yt';
+      $('preview-tag').classList.add('hidden');
+      // Stop iTunes preview if running
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+      if (!state.ytPlayer) createYtPlayer(song.yt);
+      else {
+        try { state.ytPlayer.loadVideoById(song.yt); }
+        catch (_) { createYtPlayer(song.yt); }
+      }
+    } else {
+      // Fall back to iTunes 30-sec preview
+      state.audioEngine = 'preview';
+      $('preview-tag').classList.remove('hidden');
+      if (state.ytPlayer) { try { state.ytPlayer.stopVideo(); } catch (_) {} }
+      audio.src = song.preview;
+      audio.play().catch(() => {});
+    }
+
     renderNowPlaying();
     updateMediaSession(song);
   }
   function togglePlay() {
     if (!state.current) { nextRandom(); return; }
-    if (audio.paused) audio.play();
-    else audio.pause();
+    if (state.audioEngine === 'yt' && state.ytPlayer) {
+      try {
+        const s = state.ytPlayer.getPlayerState();
+        if (s === 1) state.ytPlayer.pauseVideo();
+        else state.ytPlayer.playVideo();
+      } catch (_) {}
+    } else {
+      if (audio.paused) audio.play().catch(() => {});
+      else audio.pause();
+    }
   }
   function nextRandom(opts) {
     const next = pickRandom();
@@ -988,8 +1138,10 @@
       const id = state.history.pop();
       const s = state.catalog.find((x) => x.id === id);
       if (s) { state.current = null; play(s); }
-    } else {
+    } else if (state.audioEngine === 'preview') {
       audio.currentTime = 0;
+    } else if (state.ytPlayer?.seekTo) {
+      try { state.ytPlayer.seekTo(0, true); } catch (_) {}
     }
   }
 
@@ -1015,8 +1167,8 @@
     $('meta-movie').textContent = s.movie || '— Telugu film —';
     $('meta-title').textContent = s.title;
     $('meta-artist').textContent = s.artist + (s.year ? ` · ${s.year}` : '');
-    $('vinyl-art').style.backgroundImage = `url("${s.artHd}")`;
-    paintInnerBg(s.artHd);
+    $('vinyl-art').style.backgroundImage = `url("${s.cover}")`;
+    paintInnerBg(s.cover);
     $('btn-like').classList.toggle('liked', state.likes.has(s.id));
     $('btn-like').setAttribute('aria-pressed', state.likes.has(s.id) ? 'true' : 'false');
   }
@@ -1051,7 +1203,7 @@
   }
   function refreshChips() {
     $('shuffle-mega').disabled = !pool().length;
-    $('shuffle-label').textContent = pool().length ? 'Shuffle' : 'No songs in this era';
+    $('shuffle-label').textContent = pool().length ? 'Shuffle' : 'No songs · check connection';
   }
 
   /* ---------- MediaSession ---------- */
@@ -1069,8 +1221,8 @@
         title: s.title, artist: s.artist,
         album: s.movie || 'Telugu',
         artwork: [
-          { src: s.art.replace(/\/\d+x\d+bb\./, '/300x300bb.'), sizes: '300x300', type: 'image/jpeg' },
-          { src: s.artHd, sizes: '1000x1000', type: 'image/jpeg' },
+          { src: (s.cover || '').replace(/\/\d+x\d+bb\./, '/300x300bb.'), sizes: '300x300', type: 'image/jpeg' },
+          { src: s.cover, sizes: '1000x1000', type: 'image/jpeg' },
         ],
       });
     } catch (_) {}
@@ -1092,6 +1244,58 @@
       $('screen').appendChild(h);
       setTimeout(() => h.remove(), 1200);
     }
+  }
+
+  /* ---------- Card swipe (touch) ---------- */
+  function wireSwipe() {
+    const card = $('vinyl-wrap');
+    let startX = 0, startY = 0, dx = 0, dy = 0, swiping = false;
+    const stage = $('vinyl-stage');
+
+    function onStart(e) {
+      const t = e.touches ? e.touches[0] : e;
+      startX = t.clientX; startY = t.clientY; dx = 0; dy = 0; swiping = true;
+      stage.classList.add('swiping');
+    }
+    function onMove(e) {
+      if (!swiping) return;
+      const t = e.touches ? e.touches[0] : e;
+      dx = t.clientX - startX;
+      dy = t.clientY - startY;
+      // If user is scrolling vertically more than horizontally, abort
+      if (Math.abs(dy) > Math.abs(dx) * 1.4) { onCancel(); return; }
+      stage.style.transform = `translateX(${dx * 0.5}px)`;
+      stage.style.opacity = String(Math.max(0.5, 1 - Math.abs(dx) / 300));
+    }
+    function onEnd() {
+      if (!swiping) return;
+      swiping = false;
+      stage.classList.remove('swiping');
+      stage.style.transform = '';
+      stage.style.opacity = '';
+      if (Math.abs(dx) > 60) {
+        if (dx < 0) nextRandom();
+        else prev();
+      }
+    }
+    function onCancel() {
+      swiping = false;
+      stage.classList.remove('swiping');
+      stage.style.transform = '';
+      stage.style.opacity = '';
+    }
+
+    card.addEventListener('touchstart', onStart, { passive: true });
+    card.addEventListener('touchmove', onMove, { passive: true });
+    card.addEventListener('touchend', onEnd);
+    card.addEventListener('touchcancel', onCancel);
+
+    // mouse support too — drag the disc on desktop
+    let mouseDown = false;
+    card.addEventListener('mousedown', (e) => { mouseDown = true; onStart(e); });
+    card.addEventListener('mousemove', (e) => { if (mouseDown) onMove(e); });
+    card.addEventListener('mouseup', () => { if (mouseDown) { mouseDown = false; onEnd(); } });
+    card.addEventListener('mouseleave', () => { if (mouseDown) { mouseDown = false; onCancel(); } });
   }
 
   /* ---------- Wire UI ---------- */
@@ -1125,19 +1329,26 @@
     $('btn-like').setAttribute('aria-pressed', state.likes.has(s.id) ? 'true' : 'false');
   });
   $('btn-keys').addEventListener('click', () => {
-    showToast('SPACE play · → next · ← prev · S shuffle · L like · M mystery', 4200);
+    showToast('SPACE play · → next · ← prev · S shuffle · L like · M mystery · Swipe disc', 4500);
   });
   $('progress').addEventListener('click', (ev) => {
     const rect = ev.currentTarget.getBoundingClientRect();
     const pct = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
-    if (audio.duration) audio.currentTime = pct * audio.duration;
+    if (state.audioEngine === 'preview' && audio.duration) {
+      audio.currentTime = pct * audio.duration;
+    } else if (state.audioEngine === 'yt' && state.ytPlayer?.getDuration) {
+      try { state.ytPlayer.seekTo(pct * state.ytPlayer.getDuration(), true); } catch (_) {}
+    }
   });
   $('progress').addEventListener('keydown', (e) => {
     const dir = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
-    if (dir && audio.duration) {
+    if (!dir) return;
+    if (state.audioEngine === 'preview' && audio.duration) {
       audio.currentTime = Math.max(0, Math.min(audio.duration, audio.currentTime + dir * 2));
-      e.preventDefault();
+    } else if (state.audioEngine === 'yt' && state.ytPlayer?.getCurrentTime) {
+      try { state.ytPlayer.seekTo(state.ytPlayer.getCurrentTime() + dir * 5, true); } catch (_) {}
     }
+    e.preventDefault();
   });
   window.addEventListener('keydown', (e) => {
     if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
@@ -1152,42 +1363,22 @@
   /* ---------- Boot ---------- */
   applyMood();
   wireMediaSession();
+  wireSwipe();
 
-  // Try cache first for instant boot.
-  const cached = loadCache();
-  if (cached && cached.length > 50) {
-    state.catalog = expandCache(cached);
+  // Pre-warm YT API in parallel — first shuffle is instant
+  loadYTAPI();
+
+  loadCatalog().then((cat) => {
+    state.catalog = cat;
     refreshChips();
     $('booting').classList.add('hidden');
-    // Background refresh — fetch fresh and merge silently
-    setTimeout(() => {
-      loadCatalog().then((fresh) => {
-        if (fresh.length > state.catalog.length) {
-          state.catalog = fresh;
-          saveCache(fresh);
-          refreshChips();
-        }
-      }).catch(() => {});
-    }, 1500);
-  } else {
-    // Cold start — full fetch with progress
-    loadCatalog((done, total) => {
-      $('boot-status').textContent = `Searching the Telugu catalogue · ${done} / ${total}`;
-      $('boot-bar').style.width = ((done / total) * 100) + '%';
-    }).then((cat) => {
-      state.catalog = cat;
-      refreshChips();
-      $('booting').classList.add('hidden');
-      if (!cat.length) {
-        showToast('Couldn’t reach iTunes · check connection', 5000);
-        return;
-      }
-      saveCache(cat);
-    }).catch(() => {
-      $('booting').classList.add('hidden');
-      showToast('Catalogue fetch failed · check connection', 5000);
-    });
-  }
+    if (!cat.length) {
+      showToast('Couldn’t load catalogue · check connection', 5000);
+    }
+  }).catch(() => {
+    $('booting').classList.add('hidden');
+    showToast('Catalogue load failed · check connection', 5000);
+  });
 
 })();
 </script>
