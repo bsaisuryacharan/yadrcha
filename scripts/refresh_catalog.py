@@ -193,10 +193,60 @@ def clean_text(s: str) -> str:
 
 # ---------- Normalize ----------
 
+# Major Telugu film music labels — used as a positive signal for film songs
+TELUGU_FILM_LABELS = {
+    'aditya music', 't-series', 'lahari music', 'mango music',
+    'saregama', 'sony music', 'sony music entertainment', 'sony music india',
+    'times music', 'super cassettes industries', 'tips', 'venus records',
+    'eros music', 'panorama music', 'sa re ga ma', 'aditya music india',
+    'shemaroo', 'speed records', 'zee music', 'junglee music',
+    'starmusiq', 'think music', 'divo', 'muzik247', 'amruthavarshini',
+}
+
+# Words that strongly signal NON-film content
+NON_FILM_TERMS = {
+    'bhajan', 'mantra', 'sloka', 'stotram', 'vandanam', 'aarti', 'kirtan',
+    'bhakti', 'devotional', 'chant', 'meditation', 'lullaby', 'spiritual',
+    'remix dj', 'cover song', 'unplugged', 'reprise',
+}
+
+
+def is_film_song(d: dict) -> bool:
+    """Return True if the song appears to be from a Telugu film soundtrack.
+
+    Heuristic combines several signals:
+      - label is a known Telugu film music label, OR
+      - has a 'starring' field (movie cast list), OR
+      - album_url contains '-telugu' suffix (movie album convention)
+      - AND no devotional/non-film keywords in song or album name
+    """
+    title_lc = (d.get('song') or '').lower()
+    album_lc = (d.get('album') or '').lower()
+    label_lc = (d.get('label') or '').lower()
+    album_url = d.get('album_url') or ''
+    starring = (d.get('starring') or '').strip()
+
+    # Negative filter — exclude obvious non-film content
+    haystack = title_lc + ' ' + album_lc
+    if any(term in haystack for term in NON_FILM_TERMS):
+        return False
+    # Singles / EPs without movie context
+    if album_lc.endswith(' - single') or album_lc.endswith(' - ep'):
+        return False
+
+    # Positive signals — need at least one
+    label_match = any(lbl in label_lc for lbl in TELUGU_FILM_LABELS)
+    has_starring = bool(starring)
+    movie_album = '-telugu' in album_url.lower() or 'soundtrack' in album_lc
+    return label_match or has_starring or movie_album
+
+
 def normalize_detail(d: dict) -> dict | None:
     if not d:
         return None
     if (d.get('language') or '').lower() != 'telugu':
+        return None
+    if not is_film_song(d):
         return None
     enc = d.get('encrypted_media_url')
     if not enc:

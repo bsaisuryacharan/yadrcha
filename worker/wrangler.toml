@@ -1,0 +1,10 @@
+name = "yadrcha-ai"
+main = "yadrcha-ai.ts"
+compatibility_date = "2025-09-01"
+
+# After cloning, run:
+#   wrangler secret put GROQ_API_KEY
+#   wrangler deploy
+#
+# Get a free Groq API key from https://console.groq.com
+# Free tier: 14,400 requests/day on llama-3.1-8b-instant.

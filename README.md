@@ -19,9 +19,25 @@ A one-tap shuffle player for random Telugu film music — old to latest. Press t
 
 ## Source
 
-[Apple iTunes Search API](https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/) — free, public, no API key, CORS-enabled. Catalogue is parallel-fetched from ~50 search terms (composers, singers, movies, eras) → deduped by `trackId` → strict-filtered to `primaryGenreName === "Telugu"` → 7-day localStorage cache.
+**JioSaavn** for full-length Telugu film songs. Daily GitHub Action runs `scripts/refresh_catalog.py` which:
+1. Searches JioSaavn across ~55 diverse queries (composers, singers, movies, eras)
+2. Filters to film songs only (label allowlist + non-film keyword exclusion)
+3. Calls `song.getDetails` for each candidate to get the encrypted media URL
+4. DES-decrypts to get the direct CDN URL on `aac.saavncdn.com`
+5. Commits `catalog.json` with full metadata + audio URL + movie poster
 
-30-second previews per Apple's terms. Real movie posters and metadata.
+Frontend reads `catalog.json` once and plays via plain HTML5 `<audio>` — no API keys, no IFrame, no auth. CORS is allowed `*` on JioSaavn's CDN, so it works on file://, GitHub Pages, anywhere.
+
+## AI recommendations (optional)
+
+The frontend has a Groq-powered "smart shuffle" that learns your taste from the songs you ❤️. By default it uses a heuristic scorer that runs entirely in-browser. To enable Groq:
+
+1. Get a free Groq API key from [console.groq.com](https://console.groq.com)
+2. Deploy the Cloudflare Worker proxy in `worker/` (see `worker/README.md`)
+3. Set `AI_WORKER_URL` in `index.html` to your Worker URL
+4. AI activates once you have 5+ liked songs
+
+Heuristic fallback is always active — even with no AI, the recommender weights candidates by artist match (3×), movie match (2×), era match (1.5×), year proximity (1×), and history penalty (-4×).
 
 ## Run
 

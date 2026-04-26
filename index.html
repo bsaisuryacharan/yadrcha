@@ -239,14 +239,16 @@
      padding-right/top reserving room for the tonearm pivot. */
   .vinyl-wrap {
     position: relative;
-    height: min(100%, 320px);
+    width: 100%;
+    max-width: min(320px, calc(100dvh - 470px), 100% - 8px);
     aspect-ratio: 1;
-    max-width: 100%;
     margin: 0 auto;
     padding: 22px 22px 0 0;
     align-self: center;
     user-select: none;
     touch-action: pan-y;
+    /* never overflow the grid cell, even mid-animation */
+    overflow: visible;
   }
   .vinyl-stage {
     position: relative;
@@ -644,12 +646,15 @@
     animation: spin 1s linear infinite;
   }
 
-  /* swipe nudge feedback */
+  /* swipe nudge feedback — clamped translation stays within parent */
+  .vinyl-stage {
+    will-change: transform;
+  }
   .vinyl-stage.swiping {
     transition: transform 200ms ease-out;
   }
-  .vinyl-stage.swipe-left  { transform: translateX(-30px); opacity: 0.7; }
-  .vinyl-stage.swipe-right { transform: translateX(30px); opacity: 0.7; }
+  /* container must not overflow the rounded screen edge */
+  .phone-screen { contain: paint; }
 
   /* hidden YT iframe */
   #yt-frame {
@@ -820,6 +825,13 @@
   const CACHE_KEY = 'yadrcha.catalog.v4';
   const CACHE_TTL = 24 * 60 * 60 * 1000;
 
+  // AI recommender — leave AI_WORKER_URL empty to use heuristic-only mode.
+  // Set to your Cloudflare Worker URL once deployed (see worker/yadrcha-ai.ts).
+  const AI_WORKER_URL = ''; // e.g. 'https://yadrcha-ai.username.workers.dev'
+  const AI_LIKES_THRESHOLD = 5;   // skip AI until user has liked at least this many
+  const AI_TIMEOUT_MS = 800;       // hard timeout — fall back to heuristic
+  const AI_CANDIDATE_COUNT = 20;   // how many candidates to send Groq
+
   /* ---------- State ---------- */
   const state = {
     catalog: [],
@@ -922,6 +934,159 @@
     return choices[Math.floor(Math.random() * choices.length)];
   }
 
+  /* ---------- AI / heuristic recommender ----------
+     Strategy (per the design report):
+       1. If user has < AI_LIKES_THRESHOLD likes → pure random (no AI yet)
+       2. Otherwise: take 20 era-filtered, history-excluded candidates
+       3. Build a taste profile from likes (top artists/movies/eras + year centroid)
+       4. POST profile + candidates to Cloudflare Worker → Groq picks one
+       5. On any failure (no worker URL set, network error, timeout, AI quota
+          hit), fall back to a weighted-heuristic scorer that runs in <1ms.
+
+     Pre-fetched: every time a song starts playing, we kick off the next
+     pick in the background. By the time the user hits Next, the answer is
+     already cached → 0ms perceived latency. */
+  function buildTaste() {
+    const liked = state.catalog.filter((s) => state.likes.has(s.id));
+    if (!liked.length) return null;
+    const tally = (key) => {
+      const m = new Map();
+      liked.forEach((s) => {
+        const v = (s[key] || '').split(/\s*[,&]\s*/).filter(Boolean);
+        v.forEach((x) => m.set(x, (m.get(x) || 0) + 1));
+      });
+      return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k);
+    };
+    const artists = tally('artist').slice(0, 3);
+    const movies = tally('movie').slice(0, 3);
+    const eraCount = liked.reduce((a, s) => { a[s.era] = (a[s.era] || 0) + 1; return a; }, {});
+    const eras = Object.entries(eraCount).sort((a, b) => b[1] - a[1]).map(([k]) => k).slice(0, 2);
+    const years = liked.map((s) => s.year).filter(Boolean);
+    const yearCentroid = years.length ? Math.round(years.reduce((a, b) => a + b, 0) / years.length) : NOW_YEAR;
+    return {
+      artists, movies, eras, yearCentroid,
+      likedCount: liked.length,
+      artistSet: new Set(artists),
+      movieSet: new Set(movies),
+      topEra: eras[0] || 'all',
+    };
+  }
+
+  function sampleCandidates(n) {
+    const p = pool();
+    if (!p.length) return [];
+    const recent = new Set(state.history.slice(-30));
+    const curId = state.current?.id;
+    const fresh = p.filter((s) => !recent.has(s.id) && s.id !== curId);
+    const src = fresh.length >= n ? fresh : (fresh.length ? fresh : p);
+    // Fisher-Yates partial shuffle for n picks
+    const out = [];
+    const used = new Set();
+    while (out.length < Math.min(n, src.length)) {
+      const i = Math.floor(Math.random() * src.length);
+      if (used.has(i)) continue;
+      used.add(i);
+      out.push(src[i]);
+    }
+    return out;
+  }
+
+  /* Heuristic scorer — runs in <1ms, used as fallback and for the first
+     AI_LIKES_THRESHOLD likes when AI is gated off. */
+  function heuristicPick(candidates) {
+    const taste = buildTaste();
+    if (!taste) return candidates[Math.floor(Math.random() * candidates.length)];
+    const recent = new Set(state.history.slice(-15));
+    let best = null;
+    let bestScore = -Infinity;
+    for (const c of candidates) {
+      const cArtists = (c.artist || '').split(/\s*[,&]\s*/);
+      const artistMatch = cArtists.filter((a) => taste.artistSet.has(a)).length;
+      const movieMatch = taste.movieSet.has(c.movie) ? 1 : 0;
+      const eraMatch = c.era === taste.topEra ? 1 : 0;
+      const yearProx = c.year ? Math.max(0, 1 - Math.abs(c.year - taste.yearCentroid) / 15) : 0;
+      const histPenalty = recent.has(c.id) ? 1 : 0;
+      const score = 3.0 * artistMatch
+                  + 2.0 * movieMatch
+                  + 1.5 * eraMatch
+                  + 1.0 * yearProx
+                  - 4.0 * histPenalty
+                  + 0.3 * Math.random(); // jitter
+      if (score > bestScore) { bestScore = score; best = c; }
+    }
+    return best || candidates[0];
+  }
+
+  /* AI pick via Cloudflare Worker → Groq. Returns null on any failure. */
+  async function aiPick(candidates) {
+    if (!AI_WORKER_URL) return null;
+    const taste = buildTaste();
+    if (!taste || taste.likedCount < AI_LIKES_THRESHOLD) return null;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), AI_TIMEOUT_MS);
+    try {
+      const r = await fetch(AI_WORKER_URL, {
+        method: 'POST',
+        signal: ctrl.signal,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentSong: state.current ? {
+            id: state.current.id, title: state.current.title,
+            movie: state.current.movie, artist: state.current.artist,
+            year: state.current.year,
+          } : null,
+          taste: {
+            artists: taste.artists, movies: taste.movies, eras: taste.eras,
+            yearCentroid: taste.yearCentroid, likedCount: taste.likedCount,
+          },
+          history: state.history.slice(-5),
+          candidates: candidates.map((c) => ({
+            id: c.id, title: c.title, movie: c.movie,
+            artist: c.artist, year: c.year,
+          })),
+        }),
+      });
+      clearTimeout(timer);
+      if (!r.ok) return null;
+      const data = await r.json();
+      return candidates.find((c) => c.id === data.id) || null;
+    } catch (_) {
+      clearTimeout(timer);
+      return null;
+    }
+  }
+
+  let nextPickCache = null;
+  async function prefetchNext() {
+    const cands = sampleCandidates(AI_CANDIDATE_COUNT);
+    if (!cands.length) { nextPickCache = null; return; }
+    const taste = buildTaste();
+    if (!taste || taste.likedCount < AI_LIKES_THRESHOLD) {
+      // Cold profile — just use random
+      nextPickCache = cands[Math.floor(Math.random() * cands.length)];
+      return;
+    }
+    // Try AI first, fall back to heuristic
+    const ai = await aiPick(cands);
+    nextPickCache = ai || heuristicPick(cands);
+  }
+
+  function pickNext() {
+    if (nextPickCache) {
+      const p = nextPickCache;
+      nextPickCache = null;
+      return p;
+    }
+    // No prefetch ready — synchronous heuristic
+    const cands = sampleCandidates(AI_CANDIDATE_COUNT);
+    if (!cands.length) return null;
+    const taste = buildTaste();
+    if (!taste || taste.likedCount < AI_LIKES_THRESHOLD) {
+      return cands[Math.floor(Math.random() * cands.length)];
+    }
+    return heuristicPick(cands);
+  }
+
   /* ---------- Audio engine: HTML5 audio, full songs ---------- */
   const audio = $('audio');
   audio.addEventListener('play',  () => { state.isPlaying = true;  renderPlayState(); });
@@ -954,6 +1119,9 @@
     audio.play().catch(() => {});
     renderNowPlaying();
     updateMediaSession(song);
+    // Pre-fetch the next pick in the background — by the time the user
+    // hits Next, the AI/heuristic pick is already chosen → 0ms latency.
+    setTimeout(() => prefetchNext(), 200);
   }
   function togglePlay() {
     if (!state.current) { nextRandom(); return; }
@@ -961,7 +1129,7 @@
     else audio.pause();
   }
   function nextRandom(opts) {
-    const next = pickRandom();
+    const next = pickNext();
     if (next) play(next, opts);
   }
   function prev() {
@@ -1136,10 +1304,16 @@
   /* ---------- Wire UI ---------- */
   document.querySelectorAll('.dial button').forEach((btn) => {
     btn.addEventListener('click', () => {
-      state.era = btn.dataset.era;
+      const newEra = btn.dataset.era;
+      if (newEra === state.era) return; // no-op if already selected
+      state.era = newEra;
       document.querySelectorAll('.dial button').forEach((b) => b.setAttribute('aria-pressed', 'false'));
       btn.setAttribute('aria-pressed', 'true');
+      nextPickCache = null; // era changed, stale prefetch
       refreshChips();
+      // Immediately play a song from the new era — user expects the
+      // currently playing song to switch as soon as they tap a chip.
+      if (state.catalog.length) nextRandom();
     });
   });
   $('shuffle-mega').addEventListener('click', () => {
@@ -1162,6 +1336,10 @@
     localStorage.setItem('yadrcha.likes', JSON.stringify([...state.likes]));
     $('btn-like').classList.toggle('liked', state.likes.has(s.id));
     $('btn-like').setAttribute('aria-pressed', state.likes.has(s.id) ? 'true' : 'false');
+    // Likes drive the recommender — invalidate the stale prefetch so
+    // the next pick reflects the updated taste profile.
+    nextPickCache = null;
+    setTimeout(() => prefetchNext(), 100);
   });
   $('btn-keys').addEventListener('click', () => {
     showToast('SPACE play · → next · ← prev · S shuffle · L like · M mystery · Swipe disc', 4500);
