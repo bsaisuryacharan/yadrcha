@@ -1,0 +1,1195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#050309" />
+<title>Yadrcha · Random Telugu Music</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="preconnect" href="https://itunes.apple.com" />
+<link rel="preconnect" href="https://audio-ssl.itunes.apple.com" />
+<link rel="preconnect" href="https://is1-ssl.mzstatic.com" />
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Righteous&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --bg-0: #050309;
+    --phone-bezel: #0a0710;
+    --phone-screen: #07050f;
+    --surface: rgba(255,255,255,0.05);
+    --surface-strong: rgba(255,255,255,0.09);
+    --border: rgba(255,255,255,0.10);
+    --border-strong: rgba(255,255,255,0.18);
+    --fg: #f8fafc;
+    --fg-muted: #b5b1c8;
+    --fg-dim: #7f7a98;
+    --accent: #22c55e;
+    --hot: #ec4899;
+    --indigo: #6366f1;
+    --teal: #14b8a6;
+    --gold: #f59e0b;
+    --t-fast: 140ms cubic-bezier(.2,.8,.2,1);
+    --t-med: 260ms cubic-bezier(.2,.8,.2,1);
+    --t-slow: 480ms cubic-bezier(.2,.8,.2,1);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: "Poppins", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--fg);
+    background: #02010a;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    min-height: 100dvh;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  ::selection { background: var(--hot); color: #fff; }
+
+  .ambient {
+    position: fixed; inset: 0; z-index: -1;
+    background:
+      radial-gradient(50% 40% at 25% 20%, rgba(236,72,153,0.18), transparent 70%),
+      radial-gradient(50% 40% at 75% 30%, rgba(99,102,241,0.18), transparent 70%),
+      radial-gradient(60% 50% at 50% 110%, rgba(20,184,166,0.16), transparent 70%),
+      linear-gradient(180deg, #02010a 0%, #07050f 100%);
+    transition: filter var(--t-slow);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .ambient { animation: drift 28s ease-in-out infinite alternate; }
+    @keyframes drift {
+      0%   { filter: hue-rotate(0deg) saturate(1); }
+      100% { filter: hue-rotate(30deg) saturate(1.2); }
+    }
+  }
+
+  .stage {
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    padding: 24px 16px;
+  }
+  .phone {
+    position: relative;
+    width: 100%;
+    max-width: 420px;
+    background: var(--phone-bezel);
+    border-radius: 56px;
+    padding: 14px;
+    box-shadow:
+      inset 0 0 0 2px rgba(255,255,255,0.07),
+      inset 0 0 0 4px rgba(255,255,255,0.02),
+      0 0 0 1px rgba(255,255,255,0.04),
+      0 70px 140px -40px rgba(0,0,0,0.8),
+      0 30px 60px -20px rgba(0,0,0,0.6);
+  }
+  .phone::before {
+    content: "";
+    position: absolute;
+    top: 26px; left: 50%;
+    transform: translateX(-50%);
+    width: 108px; height: 30px;
+    background: #000;
+    border-radius: 999px;
+    z-index: 100;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+  }
+  .phone-screen {
+    position: relative;
+    background: var(--phone-screen);
+    border-radius: 44px;
+    overflow: hidden;
+    min-height: 760px;
+    isolation: isolate;
+  }
+  @media (max-width: 640px) {
+    .stage { padding: 0; }
+    .phone {
+      max-width: none; border-radius: 0; padding: 0;
+      box-shadow: none; min-height: 100dvh;
+    }
+    .phone::before { display: none; }
+    .phone-screen { border-radius: 0; min-height: 100dvh; }
+  }
+
+  .inner-bg {
+    position: absolute; inset: 0; z-index: 0;
+    background:
+      radial-gradient(60% 50% at 30% 20%, rgba(236,72,153,0.30), transparent 70%),
+      radial-gradient(60% 50% at 80% 80%, rgba(99,102,241,0.30), transparent 70%),
+      linear-gradient(180deg, #07050f 0%, #0c0820 60%, #050309 100%);
+    transition: background var(--t-slow);
+  }
+  .inner-bg::after {
+    content: "";
+    position: absolute; inset: 0;
+    background-image: radial-gradient(rgba(255,255,255,0.04) 1px, transparent 1px);
+    background-size: 3px 3px;
+    mix-blend-mode: overlay;
+    opacity: .35;
+    pointer-events: none;
+  }
+
+  .screen-pad {
+    position: relative;
+    z-index: 1;
+    padding: 70px 22px 32px;
+  }
+  .top-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 18px;
+  }
+  .brand-mark {
+    display: flex; align-items: center; gap: 10px;
+    font-family: "Righteous";
+    font-size: 14px; letter-spacing: 1.5px;
+  }
+  .brand-mark .logo {
+    width: 30px; height: 30px;
+    border-radius: 9px;
+    display: grid; place-items: center;
+    background: linear-gradient(135deg, var(--hot), var(--indigo) 60%, var(--teal));
+    box-shadow: 0 6px 18px -4px rgba(236,72,153,.6);
+  }
+  .brand-mark .logo svg { width: 16px; height: 16px; color: #fff; }
+  .icon-btn {
+    appearance: none; border: none; background: var(--surface);
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    display: grid; place-items: center;
+    color: var(--fg);
+    backdrop-filter: blur(12px);
+    transition: background var(--t-fast), transform var(--t-fast);
+  }
+  .icon-btn:hover { background: var(--surface-strong); }
+  .icon-btn:active { transform: scale(0.95); }
+  .icon-btn svg { width: 16px; height: 16px; }
+
+  .mood {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 14px;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(12px);
+    margin: 0 auto 22px;
+    width: fit-content;
+    font-size: 11px;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+  }
+  .mood .pulse {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .mood .pulse { animation: pulse 2s infinite; }
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50%      { transform: scale(1.4); opacity: .55; }
+  }
+
+  /* VINYL + TONEARM */
+  .vinyl-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 320px;
+    margin: 0 auto 22px;
+    padding: 28px 28px 0 0;
+  }
+  .vinyl-stage {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1;
+  }
+  .vinyl {
+    position: absolute; inset: 0;
+    border-radius: 50%;
+    background:
+      repeating-radial-gradient(circle at center,
+        #0a0a0a 0px, #0a0a0a 1px,
+        #15151a 1px, #15151a 3px),
+      radial-gradient(circle at 30% 30%, #2a2a30 0%, #0a0a0a 60%);
+    box-shadow:
+      0 30px 80px -20px rgba(0,0,0,0.9),
+      inset 0 0 0 2px rgba(255,255,255,0.04);
+    transition: transform var(--t-med);
+  }
+  .vinyl-art {
+    position: absolute;
+    inset: 28%;
+    border-radius: 50%;
+    background-color: #1a1525;
+    background-size: cover;
+    background-position: center;
+    box-shadow:
+      inset 0 0 0 4px rgba(0,0,0,0.4),
+      inset 0 0 0 5px rgba(255,255,255,0.06);
+  }
+  .vinyl-art::after {
+    content: "";
+    position: absolute;
+    inset: 47%;
+    background: radial-gradient(circle, #3a3340 0%, #0a0610 60%);
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.08);
+  }
+  .vinyl-shimmer {
+    position: absolute;
+    inset: 28%;
+    border-radius: 50%;
+    background: linear-gradient(135deg, transparent 30%, rgba(255,255,255,0.18) 50%, transparent 70%);
+    pointer-events: none;
+    opacity: 0.5;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .playing .vinyl { animation: spin 12s linear infinite; }
+    .spinning .vinyl { animation: spin 0.8s cubic-bezier(.5,.05,.5,.95) 1; }
+  }
+  @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+
+  .tonearm {
+    position: absolute;
+    top: 0; right: 0;
+    width: 56px;
+    height: 78%;
+    pointer-events: none;
+    z-index: 5;
+  }
+  .tonearm .pivot {
+    position: absolute;
+    top: 0; right: 0;
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, #d1d5db 0%, #4b5563 50%, #1f2937 100%);
+    box-shadow:
+      0 4px 14px rgba(0,0,0,0.6),
+      inset 0 1px 0 rgba(255,255,255,0.4),
+      inset 0 -1px 0 rgba(0,0,0,0.5);
+    z-index: 2;
+  }
+  .tonearm .pivot::after {
+    content: "";
+    position: absolute;
+    inset: 8px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, #6b7280, #111827);
+  }
+  .tonearm .arm {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 5px;
+    height: calc(100% - 16px);
+    background: linear-gradient(180deg, #d1d5db 0%, #6b7280 80%, #374151 100%);
+    border-radius: 999px;
+    transform-origin: top center;
+    transform: rotate(38deg);
+    transition: transform 750ms cubic-bezier(.6,.02,.4,1.15);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  }
+  .playing .tonearm .arm { transform: rotate(-6deg); }
+  .tonearm .arm::before {
+    content: "";
+    position: absolute;
+    top: -12px; left: 50%;
+    transform: translateX(-50%);
+    width: 16px; height: 14px;
+    border-radius: 4px 4px 999px 999px;
+    background: linear-gradient(180deg, #1f2937, #0f172a);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  }
+  .tonearm .arm::after {
+    content: "";
+    position: absolute;
+    bottom: -8px; left: 50%;
+    transform: translateX(-50%) rotate(-10deg);
+    width: 24px; height: 16px;
+    background: linear-gradient(180deg, #1f2937 0%, #0a0e1a 100%);
+    border-radius: 4px;
+    box-shadow:
+      0 2px 6px rgba(0,0,0,0.7),
+      inset 0 1px 0 rgba(255,255,255,0.15);
+  }
+
+  .meta { text-align: center; margin-bottom: 18px; padding: 0 8px; }
+  .meta .movie {
+    font-size: 10px;
+    letter-spacing: 1.8px;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 8px;
+    min-height: 13px;
+    transition: opacity var(--t-med);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .meta .title {
+    font-family: "DM Serif Display";
+    font-style: italic;
+    font-size: 22px;
+    line-height: 1.15;
+    margin: 0 0 8px;
+    word-break: break-word;
+    transition: opacity var(--t-med);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    min-height: 50px;
+  }
+  .meta .artist {
+    color: var(--fg-muted);
+    font-size: 12px;
+    margin: 0;
+    transition: opacity var(--t-med);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .meta.revealing .movie,
+  .meta.revealing .title,
+  .meta.revealing .artist { opacity: 0.15; filter: blur(8px); }
+
+  .progress-wrap { padding: 0 4px; margin-bottom: 12px; }
+  .progress {
+    position: relative;
+    height: 4px;
+    background: var(--surface);
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  .progress .filled {
+    position: absolute; inset: 0 auto 0 0;
+    width: 0%;
+    background: linear-gradient(90deg, var(--hot), var(--indigo));
+    border-radius: 999px;
+    pointer-events: none;
+  }
+  .progress .thumb {
+    position: absolute;
+    top: 50%;
+    width: 12px; height: 12px;
+    background: #fff;
+    border-radius: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    transition: transform var(--t-fast);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    pointer-events: none;
+  }
+  .progress:hover .thumb { transform: translate(-50%, -50%) scale(1); }
+  .times {
+    display: flex; justify-content: space-between;
+    font-variant-numeric: tabular-nums;
+    font-size: 10px;
+    color: var(--fg-dim);
+    margin-top: 6px;
+    letter-spacing: 0.5px;
+  }
+  .preview-tag {
+    display: inline-block;
+    font-size: 9px;
+    letter-spacing: 1.4px;
+    color: var(--fg-dim);
+    background: var(--surface);
+    padding: 2px 8px;
+    border-radius: 999px;
+    margin-left: 8px;
+    text-transform: uppercase;
+  }
+
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 22px;
+  }
+  .ctrl {
+    appearance: none; border: none; background: transparent;
+    color: var(--fg);
+    width: 100%; height: 44px;
+    border-radius: 14px;
+    display: grid; place-items: center;
+    transition: background var(--t-fast), transform var(--t-fast), color var(--t-fast);
+  }
+  .ctrl:hover { background: var(--surface); }
+  .ctrl:active { transform: scale(0.92); }
+  .ctrl svg { width: 20px; height: 20px; }
+  .ctrl:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .ctrl.liked { color: var(--hot); }
+  .ctrl.play {
+    height: 56px;
+    background: radial-gradient(circle at 30% 30%, #34d399 0%, #16a34a 60%, #047857 100%);
+    color: #07050f;
+    box-shadow:
+      0 12px 28px -8px rgba(34,197,94,0.65),
+      inset 0 1px 0 rgba(255,255,255,0.3);
+    position: relative;
+    overflow: hidden;
+  }
+  .ctrl.play:hover { transform: scale(1.04); }
+  .ctrl.play svg { width: 24px; height: 24px; }
+  .spin-burst { animation: spin-burst 0.7s cubic-bezier(.5,.05,.5,.95) 1; }
+  @keyframes spin-burst {
+    0%   { transform: rotate(0) scale(1); }
+    50%  { transform: rotate(360deg) scale(1.08); }
+    100% { transform: rotate(720deg) scale(1); }
+  }
+  .heart-burst {
+    position: absolute;
+    pointer-events: none;
+    color: var(--hot);
+    font-size: 12px;
+    animation: heart-fly 1s ease-out forwards;
+    z-index: 50;
+  }
+  @keyframes heart-fly {
+    0%   { transform: translate(0, 0) scale(.4); opacity: 0; }
+    20%  { opacity: 1; }
+    100% { transform: translate(var(--dx, 20px), -80px) scale(1.2); opacity: 0; }
+  }
+
+  .dial-wrap { margin-bottom: 18px; }
+  .dial-label {
+    font-size: 10px;
+    letter-spacing: 1.6px;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    text-align: center;
+    margin-bottom: 8px;
+  }
+  .dial {
+    display: flex;
+    justify-content: space-between;
+    gap: 4px;
+    padding: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    backdrop-filter: blur(12px);
+  }
+  .dial button {
+    flex: 1;
+    appearance: none; border: none;
+    background: transparent;
+    color: var(--fg-muted);
+    padding: 8px 4px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    transition: background var(--t-fast), color var(--t-fast), transform var(--t-fast);
+    min-height: 32px;
+    white-space: nowrap;
+  }
+  .dial button:hover { color: var(--fg); }
+  .dial button[aria-pressed="true"] {
+    background: linear-gradient(135deg, var(--hot), var(--indigo));
+    color: #fff;
+    box-shadow: 0 4px 16px -4px rgba(236,72,153,0.6);
+  }
+  .dial button:active { transform: scale(0.96); }
+
+  .shuffle-mega {
+    position: relative;
+    appearance: none; border: none;
+    width: 100%;
+    padding: 16px 18px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #ec4899 0%, #6366f1 50%, #14b8a6 100%);
+    color: #fff;
+    font-family: "Righteous";
+    font-size: 14px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    box-shadow:
+      0 16px 40px -10px rgba(99,102,241,0.6),
+      inset 0 1px 0 rgba(255,255,255,0.2);
+    transition: transform var(--t-fast), box-shadow var(--t-fast);
+    overflow: hidden;
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+  }
+  .shuffle-mega:hover { transform: translateY(-2px); }
+  .shuffle-mega:active { transform: scale(0.98); }
+  .shuffle-mega:disabled {
+    background: linear-gradient(135deg, #2a2438, #1a1525);
+    cursor: wait;
+    box-shadow: none;
+    color: var(--fg-dim);
+  }
+  .shuffle-mega svg { width: 18px; height: 18px; }
+  .shuffle-mega::before {
+    content: "";
+    position: absolute; inset: 0;
+    background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.3) 50%, transparent 70%);
+    transform: translateX(-100%);
+    transition: transform 0.6s ease-in-out;
+  }
+  .shuffle-mega:hover::before { transform: translateX(100%); }
+
+  .toast {
+    position: absolute;
+    top: 72px; left: 50%;
+    transform: translate(-50%, -120%);
+    background: var(--surface-strong);
+    border: 1px solid var(--border-strong);
+    backdrop-filter: blur(20px);
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-size: 11px;
+    z-index: 150;
+    transition: transform var(--t-med);
+    max-width: 80%;
+    text-align: center;
+    color: var(--fg);
+  }
+  .toast.show { transform: translate(-50%, 0); }
+
+  .booting {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    z-index: 200;
+    background: rgba(7,5,15,0.85);
+    backdrop-filter: blur(20px);
+  }
+  .booting.hidden { display: none; }
+  .boot-card { text-align: center; padding: 24px; max-width: 320px; }
+  .boot-card h3 {
+    font-family: "DM Serif Display";
+    font-style: italic;
+    font-size: 22px;
+    margin: 0 0 8px;
+    background: linear-gradient(120deg, #ec4899, #6366f1, #14b8a6);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .boot-card p {
+    font-size: 12px;
+    color: var(--fg-muted);
+    margin: 0 0 16px;
+  }
+  .boot-spinner {
+    width: 36px; height: 36px;
+    margin: 0 auto 14px;
+    border: 3px solid var(--surface);
+    border-top-color: var(--hot);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  .boot-progress {
+    width: 100%;
+    height: 3px;
+    background: var(--surface);
+    border-radius: 999px;
+    overflow: hidden;
+    margin-top: 12px;
+  }
+  .boot-progress .bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #ec4899, #6366f1, #14b8a6);
+    transition: width 200ms ease-out;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation: none !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="ambient" id="ambient"></div>
+
+<div class="stage">
+  <div class="phone">
+    <div class="phone-screen" id="screen">
+      <div class="inner-bg" id="inner-bg"></div>
+
+      <div class="screen-pad">
+        <div class="top-row">
+          <div class="brand-mark" aria-label="Yadrcha">
+            <span class="logo" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 18V5l12-2v13"/>
+                <circle cx="6" cy="18" r="3"/>
+                <circle cx="18" cy="16" r="3"/>
+              </svg>
+            </span>
+            <span>YADRCHA</span>
+          </div>
+          <button class="icon-btn" id="btn-keys" type="button" aria-label="Keyboard shortcuts" title="Shortcuts">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="6" width="20" height="14" rx="2"/>
+              <line x1="6" y1="10" x2="6.01" y2="10"/>
+              <line x1="10" y1="10" x2="10.01" y2="10"/>
+              <line x1="14" y1="10" x2="14.01" y2="10"/>
+              <line x1="18" y1="10" x2="18.01" y2="10"/>
+              <line x1="6" y1="14" x2="6.01" y2="14"/>
+              <line x1="18" y1="14" x2="18.01" y2="14"/>
+              <line x1="10" y1="14" x2="14" y2="14"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="mood" id="mood">
+          <span class="pulse" aria-hidden="true"></span>
+          <span id="mood-text">Tuning the dial…</span>
+        </div>
+
+        <div class="vinyl-wrap">
+          <div class="vinyl-stage" id="vinyl-stage">
+            <div class="vinyl" id="vinyl">
+              <div class="vinyl-art" id="vinyl-art"></div>
+              <div class="vinyl-shimmer" aria-hidden="true"></div>
+            </div>
+          </div>
+          <div class="tonearm" aria-hidden="true">
+            <div class="pivot"></div>
+            <div class="arm"></div>
+          </div>
+        </div>
+
+        <div class="meta" id="meta">
+          <div class="movie" id="meta-movie">Press shuffle to begin</div>
+          <h2 class="title" id="meta-title">Random Telugu hits</h2>
+          <p class="artist" id="meta-artist">— old to latest —</p>
+        </div>
+
+        <div class="progress-wrap">
+          <div class="progress" id="progress" role="slider" tabindex="0"
+            aria-label="Track position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div class="filled" id="filled"></div>
+            <div class="thumb" id="thumb"></div>
+          </div>
+          <div class="times">
+            <span id="time-cur">0:00</span>
+            <span><span id="time-tot">0:30</span><span class="preview-tag">Preview</span></span>
+          </div>
+        </div>
+
+        <div class="controls">
+          <button class="ctrl" id="btn-like" type="button" aria-label="Like" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/>
+            </svg>
+          </button>
+          <button class="ctrl" id="btn-prev" type="button" aria-label="Previous">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zM9.5 12l8.5 6V6z"/></svg>
+          </button>
+          <button class="ctrl play" id="btn-play" type="button" aria-label="Play / pause">
+            <svg id="icon-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            <svg id="icon-pause" viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+          </button>
+          <button class="ctrl" id="btn-next" type="button" aria-label="Next random">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg>
+          </button>
+          <button class="ctrl" id="btn-mystery" type="button" aria-label="Mystery reveal" title="Mystery — title hidden until reveal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="dial-wrap">
+          <div class="dial-label">Era</div>
+          <div class="dial" role="group" aria-label="Era filter">
+            <button data-era="all" aria-pressed="true" type="button">All</button>
+            <button data-era="vintage" aria-pressed="false" type="button">Vintage</button>
+            <button data-era="90s" aria-pressed="false" type="button">90s</button>
+            <button data-era="2000s" aria-pressed="false" type="button">2000s</button>
+            <button data-era="latest" aria-pressed="false" type="button">Latest</button>
+          </div>
+        </div>
+
+        <button class="shuffle-mega" id="shuffle-mega" type="button" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M16 3h5v5"/>
+            <path d="M4 20 21 3"/>
+            <path d="M21 16v5h-5"/>
+            <path d="M15 15l6 6"/>
+            <path d="M4 4l5 5"/>
+          </svg>
+          <span id="shuffle-label">Loading…</span>
+        </button>
+      </div>
+
+      <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+      <div class="booting" id="booting">
+        <div class="boot-card">
+          <div class="boot-spinner" aria-hidden="true"></div>
+          <h3>Tuning the dial…</h3>
+          <p id="boot-status">Searching the Telugu catalogue</p>
+          <div class="boot-progress"><div class="bar" id="boot-bar"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<audio id="audio" preload="auto"></audio>
+
+<script>
+/* ===========================================================
+   YADRCHA — Random Telugu Music
+   - Source: Apple iTunes Search API (free, public, CORS-enabled,
+             works on file:// / Cloudflare Pages / any host)
+   - Catalogue: 50 parallel queries → 1500-2500 unique songs
+   - Cache: 7-day localStorage (instant subsequent loads)
+   - Background refresh: silently fetches more after using cache
+   - Era filtering: by releaseDate year (real, not playlist guess)
+   =========================================================== */
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+
+  /* ---------- Config ---------- */
+  // 50 diverse search terms covering composers, singers, movies,
+  // eras, and genres. Each returns up to 200 songs from iTunes →
+  // after dedupe ~1500-2500 unique Telugu film tracks.
+  const QUERIES = [
+    // Composers / music directors
+    'ilaiyaraaja telugu', 'ar rahman telugu', 'devi sri prasad', 'thaman s telugu',
+    'anirudh telugu', 'mickey j meyer', 'harris jayaraj telugu', 'vidyasagar telugu',
+    'koti telugu', 'raj koti', 'm m keeravani', 'ramana gogula',
+    // Singers
+    'ghantasala telugu', 'spb telugu', 'sid sriram telugu', 'shreya ghoshal telugu',
+    'kk telugu', 'sonu nigam telugu', 'javed ali telugu', 'chinmayi telugu',
+    'sunitha telugu', 'armaan malik telugu', 'karthik telugu', 'haricharan telugu',
+    // Famous movies
+    'pushpa telugu', 'baahubali', 'rrr telugu', 'magadheera', 'eega telugu',
+    'arjun reddy', 'jersey telugu', 'fidaa telugu', 'ala vaikunthapurramuloo',
+    'sarrainodu', 'saaho', 'athadu telugu', 'okkadu telugu', 'pokiri telugu',
+    'khaidi telugu', 'sye raa', 'maharshi telugu',
+    // Generic / era keywords
+    'telugu hits', 'tollywood songs', 'telugu romantic', 'telugu folk',
+    'telugu old songs', 'telugu super hit', 'telugu melody', 'telugu dance',
+    'telugu 1990', 'telugu 2000', 'telugu 2010', 'telugu 2020',
+  ];
+
+  const CACHE_KEY = 'yadrcha.catalog.v2';
+  const CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+  /* ---------- State ---------- */
+  const state = {
+    catalog: [],
+    current: null,
+    history: [],
+    era: 'all',
+    isPlaying: false,
+    likes: new Set(JSON.parse(localStorage.getItem('yadrcha.likes') || '[]')),
+    isMystery: false,
+  };
+
+  /* ---------- Utils ---------- */
+  const fmt = (t) => {
+    if (!isFinite(t) || t < 0) t = 0;
+    return Math.floor(t / 60) + ':' + Math.floor(t % 60).toString().padStart(2, '0');
+  };
+  const pickEra = (year) => {
+    if (!year) return 'all';
+    if (year < 1990) return 'vintage';
+    if (year < 2000) return '90s';
+    if (year < 2010) return '2000s';
+    if (year < 2020) return '2010s';
+    return 'latest';
+  };
+  function showToast(msg, ms = 2200) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => t.classList.remove('show'), ms);
+  }
+
+  /* ---------- Mood by time of day ---------- */
+  function moodForNow() {
+    const h = new Date().getHours();
+    if (h >= 5 && h < 11)  return { name: 'Morning ragas', accent: '#f59e0b', tint: '#d97706' };
+    if (h >= 11 && h < 16) return { name: 'Afternoon hits', accent: '#22c55e', tint: '#16a34a' };
+    if (h >= 16 && h < 20) return { name: 'Sunset melodies', accent: '#ec4899', tint: '#be185d' };
+    if (h >= 20 && h < 24) return { name: 'Evening romance', accent: '#a855f7', tint: '#7e22ce' };
+    return { name: 'Late-night chill', accent: '#06b6d4', tint: '#0e7490' };
+  }
+  function applyMood() {
+    const m = moodForNow();
+    $('mood-text').textContent = m.name + ' · live mix';
+    document.documentElement.style.setProperty('--gold', m.accent);
+  }
+
+  /* ---------- Cache ---------- */
+  function loadCache() {
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      if (!obj || !obj.ts || !Array.isArray(obj.data)) return null;
+      if (Date.now() - obj.ts > CACHE_TTL) return null;
+      return obj.data;
+    } catch (_) { return null; }
+  }
+  function saveCache(catalog) {
+    try {
+      // Strip cover URLs (we'll regenerate from artHd) to save space
+      const slim = catalog.map((s) => ({
+        i: s.id, t: s.title, a: s.artist, m: s.movie,
+        u: s.preview, c: s.artHd, y: s.year, d: s.duration,
+      }));
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: slim }));
+    } catch (e) {
+      // Quota exceeded — clear and retry with smaller subset
+      try {
+        localStorage.removeItem(CACHE_KEY);
+        localStorage.setItem(CACHE_KEY, JSON.stringify({
+          ts: Date.now(),
+          data: catalog.slice(0, 800).map((s) => ({
+            i: s.id, t: s.title, a: s.artist, m: s.movie,
+            u: s.preview, c: s.artHd, y: s.year, d: s.duration,
+          })),
+        }));
+      } catch (_) {}
+    }
+  }
+  function expandCache(slim) {
+    return slim.map((s) => ({
+      id: s.i, title: s.t, artist: s.a, movie: s.m,
+      preview: s.u, artHd: s.c, art: s.c, year: s.y,
+      era: pickEra(s.y), duration: s.d,
+    }));
+  }
+
+  /* ---------- iTunes fetch ---------- */
+  async function fetchQuery(q) {
+    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&entity=song&limit=200&country=in`;
+    try {
+      const res = await fetch(url, { mode: 'cors' });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.results || [];
+    } catch (e) { return []; }
+  }
+  function normalize(track) {
+    if (!track || !track.previewUrl) return null;
+    if (track.primaryGenreName !== 'Telugu') return null;
+    const year = track.releaseDate ? parseInt(track.releaseDate.slice(0, 4)) : null;
+    const art100 = track.artworkUrl100 || '';
+    const artHd = art100.replace(/\/\d+x\d+bb\./, '/1000x1000bb.');
+    return {
+      id: track.trackId,
+      title: track.trackName,
+      artist: track.artistName,
+      movie: (track.collectionName || '')
+        .replace(/\s*\([^)]*soundtrack[^)]*\)\s*$/i, '')
+        .replace(/\s*-\s*single\s*$/i, ''),
+      preview: track.previewUrl,
+      art: art100, artHd,
+      year, era: pickEra(year),
+      duration: track.trackTimeMillis ? track.trackTimeMillis / 1000 : 30,
+    };
+  }
+  async function loadCatalog(onProgress) {
+    let done = 0;
+    const lists = await Promise.all(QUERIES.map(async (q) => {
+      const r = await fetchQuery(q);
+      done++;
+      if (onProgress) onProgress(done, QUERIES.length);
+      return r;
+    }));
+    const seen = new Set();
+    const out = [];
+    lists.flat().forEach((t) => {
+      const n = normalize(t);
+      if (!n) return;
+      if (seen.has(n.id)) return;
+      seen.add(n.id);
+      out.push(n);
+    });
+    return out;
+  }
+
+  /* ---------- Pool / random ---------- */
+  function pool() {
+    if (state.era === 'all') return state.catalog;
+    if (state.era === 'latest') {
+      // Latest = 2010+ (so people see recent songs even if 2010s)
+      return state.catalog.filter((s) => s.year && s.year >= 2010);
+    }
+    return state.catalog.filter((s) => s.era === state.era);
+  }
+  function pickRandom() {
+    const p = pool();
+    if (!p.length) return null;
+    const recent = new Set(state.history.slice(-Math.min(p.length - 1, 20)));
+    const fresh = p.filter((s) => !recent.has(s.id) && (!state.current || s.id !== state.current.id));
+    const choices = fresh.length ? fresh : p;
+    return choices[Math.floor(Math.random() * choices.length)];
+  }
+
+  /* ---------- Audio engine ---------- */
+  const audio = $('audio');
+  audio.addEventListener('play',  () => { state.isPlaying = true;  renderPlayState(); });
+  audio.addEventListener('pause', () => { state.isPlaying = false; renderPlayState(); });
+  audio.addEventListener('ended', () => { nextRandom(); });
+  audio.addEventListener('timeupdate', () => {
+    const cur = audio.currentTime;
+    const tot = audio.duration || 30;
+    const pct = tot > 0 ? (cur / tot) * 100 : 0;
+    $('filled').style.width = pct + '%';
+    $('thumb').style.left = pct + '%';
+    $('time-cur').textContent = fmt(cur);
+    $('time-tot').textContent = fmt(tot);
+    $('progress').setAttribute('aria-valuenow', Math.round(pct));
+  });
+  audio.addEventListener('error', () => {
+    showToast('Couldn’t play that one · skipping');
+    setTimeout(nextRandom, 200);
+  });
+
+  /* ---------- Playback ---------- */
+  function play(song, opts = {}) {
+    if (!song) return;
+    if (state.current) state.history.push(state.current.id);
+    state.current = song;
+
+    $('vinyl-stage').classList.add('spinning');
+    setTimeout(() => $('vinyl-stage').classList.remove('spinning'), 800);
+
+    state.isMystery = !!opts.mystery;
+    audio.src = song.preview;
+    audio.play().catch(() => {});
+    renderNowPlaying();
+    updateMediaSession(song);
+  }
+  function togglePlay() {
+    if (!state.current) { nextRandom(); return; }
+    if (audio.paused) audio.play();
+    else audio.pause();
+  }
+  function nextRandom(opts) {
+    const next = pickRandom();
+    if (next) play(next, opts);
+  }
+  function prev() {
+    if (state.history.length) {
+      const id = state.history.pop();
+      const s = state.catalog.find((x) => x.id === id);
+      if (s) { state.current = null; play(s); }
+    } else {
+      audio.currentTime = 0;
+    }
+  }
+
+  /* ---------- Rendering ---------- */
+  function renderPlayState() {
+    $('icon-play').style.display  = state.isPlaying ? 'none' : '';
+    $('icon-pause').style.display = state.isPlaying ? '' : 'none';
+    $('btn-play').setAttribute('aria-label', state.isPlaying ? 'Pause' : 'Play');
+    $('vinyl-stage').classList.toggle('playing', state.isPlaying);
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = state.isPlaying ? 'playing' : 'paused';
+    }
+  }
+  function renderNowPlaying() {
+    const s = state.current;
+    if (!s) return;
+    const meta = $('meta');
+    if (state.isMystery) {
+      state.isMystery = false;
+      meta.classList.add('revealing');
+      setTimeout(() => meta.classList.remove('revealing'), 2400);
+    }
+    $('meta-movie').textContent = s.movie || '— Telugu film —';
+    $('meta-title').textContent = s.title;
+    $('meta-artist').textContent = s.artist + (s.year ? ` · ${s.year}` : '');
+    $('vinyl-art').style.backgroundImage = `url("${s.artHd}")`;
+    paintInnerBg(s.artHd);
+    $('btn-like').classList.toggle('liked', state.likes.has(s.id));
+    $('btn-like').setAttribute('aria-pressed', state.likes.has(s.id) ? 'true' : 'false');
+  }
+  function paintInnerBg(src) {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = c.height = 16;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0, 16, 16);
+        const d = ctx.getImageData(0, 0, 16, 16).data;
+        let r = 0, g = 0, b = 0, n = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          const lum = (d[i] + d[i+1] + d[i+2]) / 3;
+          if (lum < 30 || lum > 230) continue;
+          r += d[i]; g += d[i+1]; b += d[i+2]; n++;
+        }
+        if (!n) return;
+        r = Math.round(r/n); g = Math.round(g/n); b = Math.round(b/n);
+        const hex = (v) => v.toString(16).padStart(2, '0');
+        const main = `${hex(r)}${hex(g)}${hex(b)}`;
+        const mood = moodForNow();
+        $('inner-bg').style.background = `
+          radial-gradient(60% 50% at 30% 20%, #${main}90, transparent 70%),
+          radial-gradient(60% 50% at 80% 80%, ${mood.tint}80, transparent 70%),
+          linear-gradient(180deg, #07050f 0%, #0c0820 60%, #050309 100%)`;
+      } catch (_) {}
+    };
+    img.src = src;
+  }
+  function refreshChips() {
+    $('shuffle-mega').disabled = !pool().length;
+    $('shuffle-label').textContent = pool().length ? 'Shuffle' : 'No songs in this era';
+  }
+
+  /* ---------- MediaSession ---------- */
+  function wireMediaSession() {
+    if (!('mediaSession' in navigator)) return;
+    navigator.mediaSession.setActionHandler('play',  () => togglePlay());
+    navigator.mediaSession.setActionHandler('pause', () => togglePlay());
+    navigator.mediaSession.setActionHandler('previoustrack', () => prev());
+    navigator.mediaSession.setActionHandler('nexttrack', () => nextRandom());
+  }
+  function updateMediaSession(s) {
+    if (!('mediaSession' in navigator) || !s) return;
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: s.title, artist: s.artist,
+        album: s.movie || 'Telugu',
+        artwork: [
+          { src: s.art.replace(/\/\d+x\d+bb\./, '/300x300bb.'), sizes: '300x300', type: 'image/jpeg' },
+          { src: s.artHd, sizes: '1000x1000', type: 'image/jpeg' },
+        ],
+      });
+    } catch (_) {}
+  }
+
+  /* ---------- Heart burst ---------- */
+  function heartBurst(button) {
+    const rect = button.getBoundingClientRect();
+    const screen = $('screen').getBoundingClientRect();
+    for (let i = 0; i < 5; i++) {
+      const h = document.createElement('div');
+      h.className = 'heart-burst';
+      h.textContent = '♥';
+      h.style.left = (rect.left - screen.left + rect.width/2) + 'px';
+      h.style.top  = (rect.top - screen.top) + 'px';
+      h.style.setProperty('--dx', (Math.random() * 60 - 30) + 'px');
+      h.style.fontSize = (12 + Math.random() * 12) + 'px';
+      h.style.animationDelay = (i * 60) + 'ms';
+      $('screen').appendChild(h);
+      setTimeout(() => h.remove(), 1200);
+    }
+  }
+
+  /* ---------- Wire UI ---------- */
+  document.querySelectorAll('.dial button').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.dial button').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+      btn.setAttribute('aria-pressed', 'true');
+      state.era = btn.dataset.era;
+      refreshChips();
+    });
+  });
+  $('shuffle-mega').addEventListener('click', () => {
+    if ($('shuffle-mega').disabled) return;
+    const inner = $('shuffle-mega').querySelector('svg');
+    inner.classList.remove('spin-burst');
+    void inner.offsetWidth;
+    inner.classList.add('spin-burst');
+    nextRandom();
+  });
+  $('btn-play').addEventListener('click', togglePlay);
+  $('btn-next').addEventListener('click', () => nextRandom());
+  $('btn-prev').addEventListener('click', prev);
+  $('btn-mystery').addEventListener('click', () => nextRandom({ mystery: true }));
+  $('btn-like').addEventListener('click', (e) => {
+    const s = state.current;
+    if (!s) return;
+    if (state.likes.has(s.id)) state.likes.delete(s.id);
+    else { state.likes.add(s.id); heartBurst(e.currentTarget); }
+    localStorage.setItem('yadrcha.likes', JSON.stringify([...state.likes]));
+    $('btn-like').classList.toggle('liked', state.likes.has(s.id));
+    $('btn-like').setAttribute('aria-pressed', state.likes.has(s.id) ? 'true' : 'false');
+  });
+  $('btn-keys').addEventListener('click', () => {
+    showToast('SPACE play · → next · ← prev · S shuffle · L like · M mystery', 4200);
+  });
+  $('progress').addEventListener('click', (ev) => {
+    const rect = ev.currentTarget.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+    if (audio.duration) audio.currentTime = pct * audio.duration;
+  });
+  $('progress').addEventListener('keydown', (e) => {
+    const dir = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+    if (dir && audio.duration) {
+      audio.currentTime = Math.max(0, Math.min(audio.duration, audio.currentTime + dir * 2));
+      e.preventDefault();
+    }
+  });
+  window.addEventListener('keydown', (e) => {
+    if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+    if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+    else if (e.key === 'ArrowRight') nextRandom();
+    else if (e.key === 'ArrowLeft') prev();
+    else if (e.key.toLowerCase() === 's') $('shuffle-mega').click();
+    else if (e.key.toLowerCase() === 'l') $('btn-like').click();
+    else if (e.key.toLowerCase() === 'm') $('btn-mystery').click();
+  });
+
+  /* ---------- Boot ---------- */
+  applyMood();
+  wireMediaSession();
+
+  // Try cache first for instant boot.
+  const cached = loadCache();
+  if (cached && cached.length > 50) {
+    state.catalog = expandCache(cached);
+    refreshChips();
+    $('booting').classList.add('hidden');
+    // Background refresh — fetch fresh and merge silently
+    setTimeout(() => {
+      loadCatalog().then((fresh) => {
+        if (fresh.length > state.catalog.length) {
+          state.catalog = fresh;
+          saveCache(fresh);
+          refreshChips();
+        }
+      }).catch(() => {});
+    }, 1500);
+  } else {
+    // Cold start — full fetch with progress
+    loadCatalog((done, total) => {
+      $('boot-status').textContent = `Searching the Telugu catalogue · ${done} / ${total}`;
+      $('boot-bar').style.width = ((done / total) * 100) + '%';
+    }).then((cat) => {
+      state.catalog = cat;
+      refreshChips();
+      $('booting').classList.add('hidden');
+      if (!cat.length) {
+        showToast('Couldn’t reach iTunes · check connection', 5000);
+        return;
+      }
+      saveCache(cat);
+    }).catch(() => {
+      $('booting').classList.add('hidden');
+      showToast('Catalogue fetch failed · check connection', 5000);
+    });
+  }
+
+})();
+</script>
+</body>
+</html>
