@@ -27,8 +27,10 @@ import subprocess
 import sys
 import time
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Lock
 
 try:
     import requests
@@ -231,25 +233,37 @@ def main() -> int:
     todo.sort(key=lambda s: s.get('y') or 0, reverse=True)
     todo = todo[:MAX_LOOKUPS]
 
-    print(f'Looking up YouTube IDs for {len(todo)} songs (capped at {MAX_LOOKUPS})...')
+    print(f'Looking up YouTube IDs for {len(todo)} songs in parallel (4 workers)...')
     found = 0
     failed = 0
-    for i, s in enumerate(todo, 1):
+    completed = 0
+    save_lock = Lock()
+
+    def worker(s):
         vid = yt_search(s)
-        if vid:
-            s['yt'] = vid
-            found += 1
-        else:
-            s['bad'] = True  # mark; we'll retry next month or so
-            failed += 1
-        if i % 20 == 0:
-            print(f'  {i}/{len(todo)} | found {found}, failed {failed}')
-            # Save partial so a workflow timeout doesn't lose progress
-            cat = {
-                'version': 1,
-                'songs': list(by_id.values()),
-            }
-            save_catalog(cat)
+        return s, vid
+
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        futures = [ex.submit(worker, s) for s in todo]
+        for fut in as_completed(futures):
+            try:
+                s, vid = fut.result()
+            except Exception as e:
+                print(f'  ! worker exception: {e}', file=sys.stderr)
+                continue
+            if vid:
+                s['yt'] = vid
+                found += 1
+            else:
+                s['bad'] = True
+                failed += 1
+            completed += 1
+            if completed % 20 == 0:
+                print(f'  {completed}/{len(todo)} | found {found}, failed {failed}')
+                # Save partial so a workflow timeout doesn't lose progress
+                with save_lock:
+                    partial = {'version': 1, 'songs': list(by_id.values())}
+                    save_catalog(partial)
 
     cat = {
         'version': 1,

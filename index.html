@@ -157,14 +157,21 @@
   .screen-pad {
     position: relative;
     z-index: 1;
-    padding: 56px 18px 16px;
+    padding: 48px 18px 14px;
     flex: 1;
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    /* 8 rows: header / mood / VINYL (flex) / meta / progress / controls / dial / shuffle.
+       The vinyl row uses minmax(0,1fr) so it shrinks to fit available
+       space — guarantees all controls below it remain visible. */
+    grid-template-rows: auto auto minmax(0, 1fr) auto auto auto auto auto;
+    row-gap: 6px;
     min-height: 0;
   }
   @media (max-width: 640px) {
-    .screen-pad { padding: env(safe-area-inset-top, 28px) 18px env(safe-area-inset-bottom, 16px); padding-top: 28px; }
+    .screen-pad {
+      padding: env(safe-area-inset-top, 28px) 16px env(safe-area-inset-bottom, 14px);
+      padding-top: max(28px, env(safe-area-inset-top, 28px));
+    }
   }
 
   .top-row {
@@ -226,24 +233,25 @@
     50%      { transform: scale(1.4); opacity: .55; }
   }
 
-  /* VINYL DISC — poster fills the entire face */
+  /* VINYL DISC — poster fills the entire face.
+     Lives in the 1fr grid row, so it shrinks to fit available space.
+     The wrapper itself is a square (aspect-ratio:1) capped at 320px, with
+     padding-right/top reserving room for the tonearm pivot. */
   .vinyl-wrap {
     position: relative;
-    width: 100%;
-    margin: 0 auto 14px;
-    padding: 24px 24px 0 0;
-    flex-shrink: 0;
+    height: min(100%, 320px);
+    aspect-ratio: 1;
+    max-width: 100%;
+    margin: 0 auto;
+    padding: 22px 22px 0 0;
+    align-self: center;
     user-select: none;
     touch-action: pan-y;
   }
   .vinyl-stage {
     position: relative;
     width: 100%;
-    aspect-ratio: 1;
-    max-height: min(40vh, 320px);
-    margin: 0 auto;
-    /* Match aspect-ratio to actual displayed size */
-    max-width: min(40vh, 320px);
+    height: 100%;
   }
   .vinyl {
     position: absolute; inset: 0;
@@ -1171,6 +1179,7 @@
     paintInnerBg(s.cover);
     $('btn-like').classList.toggle('liked', state.likes.has(s.id));
     $('btn-like').setAttribute('aria-pressed', state.likes.has(s.id) ? 'true' : 'false');
+    syncDialHighlight();
   }
   function paintInnerBg(src) {
     const img = new Image();
@@ -1204,6 +1213,22 @@
   function refreshChips() {
     $('shuffle-mega').disabled = !pool().length;
     $('shuffle-label').textContent = pool().length ? 'Shuffle' : 'No songs · check connection';
+  }
+
+  /* Highlight the era chip that matches the currently playing song.
+     Behavior:
+       - User filter ('All' default, or a specific era): drives the pool
+       - Visual highlight: when filter='all' AND something is playing,
+         highlight the era of that song so the user can see "I'm listening
+         to a 90s song right now". Otherwise highlight matches the filter. */
+  function syncDialHighlight() {
+    let active = state.era;
+    if (state.era === 'all' && state.current && state.current.era && state.current.era !== 'all') {
+      active = state.current.era;
+    }
+    document.querySelectorAll('.dial button').forEach((btn) => {
+      btn.setAttribute('aria-pressed', btn.dataset.era === active ? 'true' : 'false');
+    });
   }
 
   /* ---------- MediaSession ---------- */
@@ -1301,9 +1326,10 @@
   /* ---------- Wire UI ---------- */
   document.querySelectorAll('.dial button').forEach((btn) => {
     btn.addEventListener('click', () => {
+      // User explicitly chose an era — set filter and update highlight.
+      state.era = btn.dataset.era;
       document.querySelectorAll('.dial button').forEach((b) => b.setAttribute('aria-pressed', 'false'));
       btn.setAttribute('aria-pressed', 'true');
-      state.era = btn.dataset.era;
       refreshChips();
     });
   });
