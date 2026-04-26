@@ -38,7 +38,7 @@ jobs:
 
       - name: Refresh catalog
         env:
-          MAX_DETAILS: ${{ inputs.max_lookups || '500' }}
+          MAX_DETAILS: ${{ inputs.max_lookups || '900' }}
         run: python scripts/refresh_catalog.py
 
       - name: Commit changes

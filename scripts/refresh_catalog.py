@@ -50,24 +50,39 @@ except ImportError:
 # Diverse JioSaavn search queries to seed the catalog. Each returns
 # 30-50 results; with dedupe across queries we get 1500-3000 unique songs.
 QUERIES = [
-    # Composers
+    # Composers (broad catalog spread)
     'ilaiyaraaja telugu', 'ar rahman telugu', 'devi sri prasad', 'thaman s telugu',
     'anirudh telugu', 'm m keeravani', 'mickey j meyer', 'harris jayaraj telugu',
     'mani sharma telugu', 'koti telugu', 'chakri telugu', 'rp patnaik',
-    'vidyasagar telugu', 'ramana gogula', 'sunny m r',
-    # Singers
+    'vidyasagar telugu', 'ramana gogula', 'sunny m r', 'g v prakash telugu',
+    'gibran telugu', 'sai charan telugu', 'achu rajamani', 'leon james telugu',
+    # Singers (broad catalog spread)
     'ghantasala telugu', 'spb telugu', 'sid sriram telugu', 'shreya ghoshal telugu',
     'sunitha telugu', 'kk telugu', 'sonu nigam telugu', 'chinmayi telugu',
-    'mangli telugu', 'haricharan telugu',
-    # Famous movies
-    'pushpa telugu', 'baahubali telugu', 'rrr telugu', 'magadheera', 'eega telugu',
-    'arjun reddy', 'jersey telugu', 'fidaa telugu', 'ala vaikunthapurramuloo',
-    'sarrainodu', 'saaho', 'devara telugu', 'salaar telugu', 'guntur kaaram',
-    'kalki 2898', 'hi nanna', 'pokiri telugu', 'okkadu telugu',
+    'mangli telugu', 'haricharan telugu', 'kapil kapilan telugu', 'anurag kulkarni',
+    'sameera bharadwaj', 'yazin nizar', 'armaan malik telugu', 'shilpa rao telugu',
+    # Classic / vintage movies
+    'baahubali telugu', 'magadheera', 'eega telugu',
+    'arjun reddy', 'jersey telugu', 'fidaa telugu',
+    'sarrainodu', 'saaho', 'pokiri telugu', 'okkadu telugu',
+    # LATEST movies (2023-2026) — heavy emphasis to grow latest era
+    'pushpa telugu', 'pushpa 2 the rule', 'rrr telugu',
+    'devara telugu', 'salaar telugu', 'kalki 2898 ad', 'guntur kaaram',
+    'hi nanna telugu', 'ala vaikunthapurramuloo', 'hanuman telugu',
+    'tillu square', 'kanguva telugu', 'thandel', 'lucky baskhar',
+    'OG telugu movie', 'maharaja telugu', 'amaran telugu',
+    'kushi telugu', 'aadikeshava', 'bhola shankar telugu', 'agent telugu',
+    'gaami telugu', 'mr bachchan', 'eagle telugu', 'family star telugu',
+    'kalki', 'devara part 1', 'mathu vadalara 2',
+    'samajavaragamana', 'bhagavanth kesari', 'extra ordinary man',
+    'bro telugu', 'mark antony telugu', 'jawan telugu',
     # Era-keyed
     'telugu hits', 'telugu old songs', 'telugu romantic', 'telugu folk',
-    'telugu 90s', 'telugu 2000', 'telugu 2010', 'telugu 2024', 'telugu 2025',
-    'telugu mass songs', 'telugu melody', 'telugu duet',
+    'telugu 1980', 'telugu 1990', 'telugu 90s', 'telugu 2000',
+    'telugu 2010', 'telugu 2020', 'telugu 2023', 'telugu 2024', 'telugu 2025',
+    'telugu mass songs', 'telugu melody', 'telugu duet', 'telugu sad songs',
+    'tollywood 2024', 'tollywood 2025', 'latest tollywood',
+    'new telugu songs', 'telugu chartbusters', 'telugu top hits',
 ]
 
 CATALOG_PATH = Path('catalog.json')
@@ -128,11 +143,26 @@ def jio_get(call: str, params: dict, max_attempts: int = 5) -> dict | None:
     return None
 
 
-def search_songs(query: str) -> list[dict]:
-    res = jio_get('search.getResults', {'q': query, 'p': '1', 'n': '40'})
-    if not res:
-        return []
-    return res.get('results', []) or []
+def search_songs(query: str, pages: int = 2) -> list[dict]:
+    """JioSaavn search.getResults supports paging — n=40 per page, p=1..N.
+    Pulling 2 pages doubles results without doubling the query count."""
+    out: list[dict] = []
+    seen = set()
+    for p in range(1, pages + 1):
+        res = jio_get('search.getResults', {'q': query, 'p': str(p), 'n': '40'})
+        if not res:
+            break
+        results = res.get('results') or []
+        if not results:
+            break
+        for r in results:
+            sid = r.get('id')
+            if sid and sid not in seen:
+                seen.add(sid)
+                out.append(r)
+        # Light delay between pages to be polite
+        time.sleep(0.5)
+    return out
 
 
 def song_details(song_id: str) -> dict | None:
@@ -142,6 +172,21 @@ def song_details(song_id: str) -> dict | None:
         return None
     songs = res.get('songs') or []
     return songs[0] if songs else None
+
+
+def album_songs(album_id: str) -> list[dict]:
+    """Returns every song in a JioSaavn album (movie soundtrack).
+    This is the multiplier — search only returns 1-2 'popular' songs per
+    movie, but content.getAlbumDetails returns the full track list (5-15
+    per film). Each song dict already has encrypted_media_url, so no extra
+    detail call.
+
+    The correct endpoint is `content.getAlbumDetails` (not `album.getDetails`
+    which returns INPUT_INVALID)."""
+    res = jio_get('content.getAlbumDetails', {'albumid': album_id})
+    if not res:
+        return []
+    return res.get('songs') or res.get('list') or []
 
 
 # ---------- URL decryption ----------
@@ -308,8 +353,9 @@ def main() -> int:
     existing_count = len(by_id)
     print(f'Loaded {existing_count} existing songs')
 
-    # 1. Search across queries — collect candidate song IDs to detail-fetch
-    candidates: dict[str, dict] = {}  # song_id -> light search result
+    # 1. Search across queries — collect candidate song IDs AND album IDs
+    candidates: dict[str, dict] = {}      # song_id -> light search result
+    album_ids: set[str] = set()           # unique album_ids to expand later
     for i, q in enumerate(QUERIES, 1):
         results = search_songs(q)
         added = 0
@@ -320,10 +366,33 @@ def main() -> int:
             if sid not in by_id and sid not in candidates:
                 candidates[sid] = r
                 added += 1
+            aid = r.get('albumid')
+            if aid:
+                album_ids.add(str(aid))
         print(f'[search {i}/{len(QUERIES)}] {q!r}: {len(results)} hits, {added} new candidates')
-        time.sleep(1.0)  # be polite
+        time.sleep(1.0)
 
-    print(f'Total new candidates: {len(candidates)}')
+    print(f'Search phase: {len(candidates)} new candidates, {len(album_ids)} unique albums to expand')
+
+    # 2. Album expansion — for each unique album (movie soundtrack), fetch
+    # ALL songs in it. Search only returns 1-2 popular per album; albums
+    # have 5-15 songs each. This is where the multiplier comes from.
+    print(f'Expanding {len(album_ids)} albums...')
+    album_expansion_added = 0
+    for j, aid in enumerate(album_ids, 1):
+        songs = album_songs(aid)
+        for song in songs:
+            sid = song.get('id')
+            if not sid:
+                continue
+            if sid in by_id or sid in candidates:
+                continue
+            candidates[sid] = song
+            album_expansion_added += 1
+        if j % 25 == 0:
+            print(f'  album {j}/{len(album_ids)} | added {album_expansion_added} songs from albums')
+        time.sleep(0.4)
+    print(f'Album expansion: +{album_expansion_added} songs (total candidates: {len(candidates)})')
 
     # 2. Fetch full details (with encrypted_media_url) in parallel.
     # Cap at MAX_DETAILS so a single workflow run stays under the time budget.
@@ -336,7 +405,15 @@ def main() -> int:
     completed = 0
 
     def worker(meta):
-        sid = meta['id']
+        # If candidate (e.g. from album.getDetails) already has the
+        # encrypted_media_url, normalize directly — saves an API call.
+        if meta.get('encrypted_media_url') and meta.get('language'):
+            n = normalize_detail(meta)
+            if n:
+                return n
+        sid = meta.get('id')
+        if not sid:
+            return None
         d = song_details(sid)
         if not d:
             return None

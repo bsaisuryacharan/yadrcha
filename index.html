@@ -857,15 +857,27 @@
   const AI_CANDIDATE_COUNT = 20;   // how many candidates to send Groq
 
   /* ---------- State ---------- */
+  const HISTORY_KEY = 'yadrcha.history.v1';
+  const HISTORY_MAX = 80; // remember last 80 plays across sessions
+
   const state = {
     catalog: [],
     current: null,
-    history: [],
+    // Persisted history — survives refresh so the same songs don't keep
+    // coming back when the user reopens the tab.
+    history: JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'),
     era: 'all',
     isPlaying: false,
     isMystery: false,
     likes: new Set(JSON.parse(localStorage.getItem('yadrcha.likes') || '[]')),
   };
+
+  function pushHistory(id) {
+    state.history.push(id);
+    if (state.history.length > HISTORY_MAX) state.history = state.history.slice(-HISTORY_MAX);
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(state.history)); }
+    catch (_) {}
+  }
 
   /* ---------- Utils ---------- */
   const fmt = (t) => {
@@ -1134,7 +1146,7 @@
   /* ---------- Playback ---------- */
   function play(song, opts = {}) {
     if (!song) return;
-    if (state.current) state.history.push(state.current.id);
+    if (state.current) pushHistory(state.current.id);
     state.current = song;
     $('vinyl-stage').classList.add('spinning');
     setTimeout(() => $('vinyl-stage').classList.remove('spinning'), 800);
