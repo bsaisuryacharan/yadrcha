@@ -50,8 +50,14 @@ jobs:
             echo "No changes to commit"
             exit 0
           fi
-          # Pull most recent main in case anything raced this workflow
-          git pull --rebase origin main || true
+          # If main moved during this run, prefer the workflow's (newer)
+          # catalog over whatever main has. The script always reads main's
+          # catalog at start and merges new songs in, so its output is
+          # the authoritative latest state.
+          git stash
+          git fetch origin
+          git reset --hard origin/main
+          git stash pop
           git add catalog.json
           git commit -m "chore: refresh catalog $(date -u +%Y-%m-%d) [skip ci]"
           git push
