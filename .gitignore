@@ -11,3 +11,7 @@ desktop.ini
 
 # Logs
 *.log
+
+# Wrangler local state
+worker/.wrangler/
+worker/node_modules/
