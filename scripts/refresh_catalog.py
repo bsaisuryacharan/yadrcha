@@ -65,17 +65,21 @@ QUERIES = [
     'baahubali telugu', 'magadheera', 'eega telugu',
     'arjun reddy', 'jersey telugu', 'fidaa telugu',
     'sarrainodu', 'saaho', 'pokiri telugu', 'okkadu telugu',
-    # LATEST movies (2023-2026) — heavy emphasis to grow latest era
-    'pushpa telugu', 'pushpa 2 the rule', 'rrr telugu',
-    'devara telugu', 'salaar telugu', 'kalki 2898 ad', 'guntur kaaram',
-    'hi nanna telugu', 'ala vaikunthapurramuloo', 'hanuman telugu',
-    'tillu square', 'kanguva telugu', 'thandel', 'lucky baskhar',
-    'OG telugu movie', 'maharaja telugu', 'amaran telugu',
-    'kushi telugu', 'aadikeshava', 'bhola shankar telugu', 'agent telugu',
-    'gaami telugu', 'mr bachchan', 'eagle telugu', 'family star telugu',
-    'kalki', 'devara part 1', 'mathu vadalara 2',
+    # LATEST movies (2024-2026) — verified popular Telugu releases
+    'pushpa 2 the rule', 'pushpa 2', 'devara part 1', 'salaar part 1',
+    'kalki 2898 ad', 'guntur kaaram', 'hi nanna telugu',
+    'tillu square', 'hanuman telugu', 'kanguva telugu',
+    'thandel telugu', 'lucky baskhar', 'maharaja telugu',
+    'amaran telugu', 'eagle telugu', 'family star telugu',
+    'gaami telugu', 'mr bachchan telugu', 'OG telugu',
     'samajavaragamana', 'bhagavanth kesari', 'extra ordinary man',
-    'bro telugu', 'mark antony telugu', 'jawan telugu',
+    'bro telugu', 'aadikeshava', 'bhola shankar telugu', 'agent telugu',
+    'kushi telugu', 'game changer telugu', 'daaku maharaaj',
+    'sankranthiki vasthunnam', 'court telugu', 'robinhood telugu',
+    'hari hara veera mallu', 'bharateeyudu 2', 'saripodhaa sanivaaram',
+    'rang de telugu', 'sreenivasa kalyanam', 'kotabommali ps',
+    'ms dhoni telugu', 'matti kusthi', 'maa nanna superhero',
+    'satyabhama', 'hit 3 telugu', 'mathu vadalara 2',
     # Era-keyed
     'telugu hits', 'telugu old songs', 'telugu romantic', 'telugu folk',
     'telugu 1980', 'telugu 1990', 'telugu 90s', 'telugu 2000',
@@ -330,6 +334,10 @@ def normalize_detail(d: dict) -> dict | None:
         duration = int(d.get('duration')) if d.get('duration') else None
     except (TypeError, ValueError):
         duration = None
+    try:
+        plays = int(d.get('play_count') or 0)
+    except (TypeError, ValueError):
+        plays = 0
     return {
         'i': d.get('id'),
         't': title,
@@ -339,6 +347,7 @@ def normalize_detail(d: dict) -> dict | None:
         'c': image,
         'y': year,
         'd': duration or 240,
+        'p': plays,
     }
 
 

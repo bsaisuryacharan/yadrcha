@@ -16,12 +16,6 @@
 <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/crypto-js.min.js" defer></script>
 
 <style>
-  /* ============================================================
-     YADRCHA — REELS LAYOUT
-     One full-screen card per song. Swipe up/down to navigate.
-     Background: blurred movie poster. Foreground: bold typography,
-     animated controls, lyrics on toggle.
-     ============================================================ */
   :root {
     --bg-0: #0a0712;
     --bg-1: #14101e;
@@ -29,11 +23,9 @@
     --fg: #f5f1f7;
     --fg-2: #c7bfd0;
     --fg-3: #847b8f;
-    --accent: #ff3b6b;          /* heart red */
-    --primary: #c4a4ff;          /* lavender */
-    --primary-dim: #8e6dd1;
+    --accent: #ff3b6b;
+    --primary: #c4a4ff;
     --gold: #ffc44a;
-    --teal: #5eead4;
     --outline: rgba(255,255,255,0.10);
     --outline-2: rgba(255,255,255,0.06);
     --t-fast: 160ms cubic-bezier(.2,0,0,1);
@@ -50,7 +42,6 @@
     --fg-2: #4a4156;
     --fg-3: #847b8f;
     --primary: #6d44d8;
-    --primary-dim: #5235a8;
     --outline: rgba(0,0,0,0.10);
     --outline-2: rgba(0,0,0,0.06);
     color-scheme: light;
@@ -76,21 +67,10 @@
     -webkit-font-feature-settings: 'liga';
   }
 
-  /* ============== APP SHELL — SINGLE CARD ============== */
-  .app {
-    height: 100dvh; width: 100vw;
-    position: relative;
-    overflow: hidden;
-    display: grid; place-items: center;
-  }
-
+  .app { height: 100dvh; width: 100vw; position: relative; overflow: hidden; display: grid; place-items: center; }
   .reel {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    max-width: 480px;
-    height: 100%;
-    margin: 0 auto;
+    position: absolute; inset: 0;
+    width: 100%; max-width: 480px; height: 100%; margin: 0 auto;
     background: var(--bg-0);
     overflow: hidden;
     user-select: none;
@@ -104,13 +84,11 @@
   .reel.exit-down  { transform: translateY(100%); opacity: 0; }
   .reel.enter-bottom { transform: translateY(100%); opacity: 0; }
   .reel.enter-top    { transform: translateY(-100%); opacity: 0; }
-  .reel.settle       { transform: translateY(0); opacity: 1; }
 
-  /* Blurred poster background filling the reel */
+  /* blurred background poster */
   .reel-bg {
     position: absolute; inset: 0;
-    background-size: cover;
-    background-position: center;
+    background-size: cover; background-position: center;
     filter: blur(45px) saturate(1.4) brightness(0.55);
     transform: scale(1.2);
     transition: opacity var(--t-slow);
@@ -129,36 +107,34 @@
     position: absolute; inset: 0;
     display: grid;
     grid-template-rows: auto 1fr auto;
-    padding: 12px 16px;
+    padding: 12px 12px;
     padding-top: max(12px, env(safe-area-inset-top, 12px));
     padding-bottom: max(12px, env(safe-area-inset-bottom, 12px));
     z-index: 2;
   }
 
-  /* ============== TOP STRIP ============== */
+  /* TOP STRIP */
   .top-strip {
     display: flex; align-items: center; gap: 8px;
-    min-height: 48px;
+    min-height: 44px;
+    padding: 0 4px;
   }
   .brand {
     display: flex; align-items: center; gap: 8px;
     font-family: "Inter"; font-weight: 700;
-    font-size: 14px; letter-spacing: 1.5px;
+    font-size: 13px; letter-spacing: 1.5px;
     color: var(--fg);
     text-shadow: 0 1px 4px rgba(0,0,0,0.6);
   }
   .brand-logo {
-    width: 28px; height: 28px;
+    width: 26px; height: 26px;
     display: grid; place-items: center;
-    border-radius: 8px;
+    border-radius: 7px;
     background: linear-gradient(135deg, var(--primary), var(--accent));
     color: #fff;
     box-shadow: 0 4px 12px rgba(0,0,0,0.4);
   }
-  .brand-logo .material-symbols-outlined {
-    font-size: 16px;
-    font-variation-settings: 'FILL' 1;
-  }
+  .brand-logo .material-symbols-outlined { font-size: 14px; font-variation-settings: 'FILL' 1; }
   .top-strip .spacer { flex: 1; }
 
   .icon-pill {
@@ -180,42 +156,58 @@
   .icon-pill:active { transform: scale(0.94); }
   .icon-pill .material-symbols-outlined { font-size: 20px; }
 
-  /* ============== CENTER STAGE — COVER + ACTIONS ============== */
+  /* ============== STAGE: cover + actions side-by-side ============== */
   .stage {
-    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 14px;
+    padding: 12px 4px;
     min-height: 0;
-    padding: 12px 0;
   }
-  .cover-wrap {
-    position: relative;
-    width: min(82%, 360px);
+  .cover-stage {
+    flex: 0 1 auto;
+    width: min(100%, 300px);
     aspect-ratio: 1;
+    perspective: 1400px;
+    position: relative;
     cursor: pointer;
   }
-  .cover {
+  .face {
     position: absolute; inset: 0;
     border-radius: var(--r-lg);
     overflow: hidden;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    transition: transform 600ms cubic-bezier(.4,0,.2,1);
+    transform-style: preserve-3d;
+    box-shadow: 0 30px 80px -20px rgba(0,0,0,0.7), 0 12px 30px -10px rgba(0,0,0,0.5);
+  }
+  .face.front {
+    transform: rotateY(0deg);
     background-size: cover;
     background-position: center;
     background-color: var(--bg-2);
-    box-shadow: 0 30px 80px -20px rgba(0,0,0,0.7), 0 12px 30px -10px rgba(0,0,0,0.5);
-    transition: transform var(--t-med), opacity var(--t-med);
   }
-  .surface.playing .cover {
-    transform: scale(1);
+  .face.back {
+    transform: rotateY(-180deg);
+    background: rgba(10, 7, 18, 0.92);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    border: 1px solid var(--outline);
   }
-  .cover.spin-burst { animation: spinBurst 0.7s cubic-bezier(.5,.05,.5,.95) 1; }
+  [data-theme="light"] .face.back { background: rgba(255, 251, 255, 0.96); }
+  .cover-stage.flipped .face.front { transform: rotateY(180deg); }
+  .cover-stage.flipped .face.back  { transform: rotateY(0deg); }
+  .face.front.spin-burst { animation: spinBurst 0.7s cubic-bezier(.5,.05,.5,.95) 1; }
   @keyframes spinBurst {
-    0% { transform: scale(1) rotate(0); }
-    50% { transform: scale(0.92) rotate(8deg); }
+    0%   { transform: scale(1) rotate(0); }
+    50%  { transform: scale(0.92) rotate(8deg); }
     100% { transform: scale(1) rotate(0); }
   }
-  /* play indicator pulse on the cover when playing */
-  .cover-wrap::after {
+
+  /* play indicator pulse — only when on front face */
+  .cover-stage::after {
     content: "";
     position: absolute; inset: 0;
     border-radius: var(--r-lg);
@@ -223,7 +215,7 @@
     pointer-events: none;
     transition: box-shadow var(--t-med);
   }
-  .surface.playing .cover-wrap::after {
+  .surface.playing .cover-stage:not(.flipped)::after {
     animation: coverGlow 2.6s ease-in-out infinite;
   }
   @keyframes coverGlow {
@@ -231,20 +223,16 @@
     50%      { box-shadow: 0 0 0 14px transparent; }
   }
 
-  /* RIGHT SIDE ACTION COLUMN (Reels-style) */
+  /* ============== ACTION COLUMN (outside the card) ============== */
   .actions {
-    position: absolute;
-    right: 4%;
-    top: 50%;
-    transform: translateY(-50%);
+    flex: 0 0 auto;
     display: flex; flex-direction: column;
-    gap: 18px;
+    gap: 14px;
     align-items: center;
-    z-index: 5;
   }
   .action {
     appearance: none; border: none;
-    width: 52px; height: 52px;
+    width: 48px; height: 48px;
     border-radius: var(--r-full);
     background: rgba(0,0,0,0.5);
     backdrop-filter: blur(16px);
@@ -255,15 +243,11 @@
     border: 1px solid var(--outline-2);
     transition: background var(--t-fast), transform var(--t-fast), color var(--t-fast);
     flex-shrink: 0;
-    position: relative;
   }
-  [data-theme="light"] .action { background: rgba(255,255,255,0.7); }
+  [data-theme="light"] .action { background: rgba(255,255,255,0.8); }
   .action:hover { transform: scale(1.08); }
   .action:active { transform: scale(0.92); }
-  .action .material-symbols-outlined {
-    font-size: 26px;
-    transition: color var(--t-fast), transform var(--t-fast);
-  }
+  .action .material-symbols-outlined { font-size: 24px; transition: color var(--t-fast); }
   .action.liked .material-symbols-outlined {
     color: var(--accent);
     font-variation-settings: 'FILL' 1;
@@ -272,9 +256,9 @@
   }
   @keyframes heartBeat {
     0%   { transform: scale(1); }
-    15%  { transform: scale(1.5); }
+    15%  { transform: scale(1.6); }
     30%  { transform: scale(0.85); }
-    45%  { transform: scale(1.3); }
+    45%  { transform: scale(1.35); }
     60%  { transform: scale(0.95); }
     100% { transform: scale(1); }
   }
@@ -282,20 +266,15 @@
     background: var(--accent);
     border-color: transparent;
   }
-  .action.toggle-on .material-symbols-outlined { color: #fff; }
+  .action.toggle-on .material-symbols-outlined { color: #fff; font-variation-settings: 'FILL' 1; }
+  .action-group { display: flex; flex-direction: column; align-items: center; gap: 2px; }
   .action-label {
-    font-size: 9px;
-    letter-spacing: 0.4px;
+    font-size: 9px; letter-spacing: 0.4px;
     color: var(--fg-2);
     text-shadow: 0 1px 3px rgba(0,0,0,0.6);
-    margin-top: 2px;
     font-weight: 600;
   }
-  .action-group {
-    display: flex; flex-direction: column; align-items: center; gap: 2px;
-  }
 
-  /* heart particles */
   .heart-burst {
     position: fixed;
     pointer-events: none;
@@ -310,11 +289,175 @@
     100% { transform: translate(var(--dx, 20px), -120px) scale(1.4); opacity: 0; }
   }
 
-  /* ============== BOTTOM BAR ============== */
-  .bottom {
-    display: flex; flex-direction: column; gap: 10px;
-    padding-top: 12px;
+  /* ============== BACK CONTENT (lyrics or search) ============== */
+  .back-pane {
+    position: absolute; inset: 0;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    color: var(--fg);
   }
+  .back-pane.show { display: flex; }
+  /* LYRICS PANE */
+  .pane-lyrics-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--outline);
+    flex-shrink: 0;
+  }
+  .pane-lyrics-title {
+    font-family: "DM Serif Display"; font-style: italic;
+    font-size: 13px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    flex: 1; min-width: 0;
+    color: var(--fg);
+  }
+  .pane-lyrics-body {
+    flex: 1; min-height: 0;
+    position: relative;
+    overflow: hidden;
+  }
+  .pane-lyrics-body::before, .pane-lyrics-body::after {
+    content: ""; position: absolute; left: 0; right: 0;
+    height: 30px; pointer-events: none; z-index: 2;
+  }
+  .pane-lyrics-body::before {
+    top: 0; background: linear-gradient(180deg, rgba(10,7,18,1) 0%, transparent 100%);
+  }
+  .pane-lyrics-body::after {
+    bottom: 0; background: linear-gradient(0deg, rgba(10,7,18,1) 0%, transparent 100%);
+  }
+  [data-theme="light"] .pane-lyrics-body::before {
+    background: linear-gradient(180deg, rgba(255,251,255,1) 0%, transparent 100%);
+  }
+  [data-theme="light"] .pane-lyrics-body::after {
+    background: linear-gradient(0deg, rgba(255,251,255,1) 0%, transparent 100%);
+  }
+  .lyrics-track {
+    display: flex; flex-direction: column; align-items: center;
+    will-change: transform;
+    transition: transform 380ms cubic-bezier(.4,0,.2,1);
+    padding: 50% 12px;
+    text-align: center;
+  }
+  .lyrics-line {
+    font-family: "DM Serif Display"; font-style: italic;
+    font-size: 13px;
+    line-height: 1.4;
+    margin: 4px 0;
+    color: var(--fg-3);
+    transition: color var(--t-med), font-size var(--t-med), opacity var(--t-med);
+    max-width: 100%; word-wrap: break-word;
+    opacity: 0.55;
+  }
+  .lyrics-line.active {
+    color: var(--fg);
+    font-size: 17px;
+    font-weight: 600;
+    opacity: 1;
+    text-shadow: 0 0 14px color-mix(in srgb, var(--primary) 60%, transparent);
+  }
+  .lyrics-line.near {
+    color: var(--fg-2);
+    font-size: 14px;
+    opacity: 0.8;
+  }
+  .lyrics-state {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    text-align: center; padding: 20px;
+  }
+  .lyrics-state.hidden { display: none; }
+  .lyrics-state .material-symbols-outlined {
+    font-size: 28px; color: var(--fg-3);
+    margin-bottom: 6px;
+  }
+  .lyrics-state .label { font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--fg-2); margin-bottom: 4px; }
+  .lyrics-state .sub { font-family: "DM Serif Display"; font-style: italic; font-size: 14px; color: var(--fg); }
+  .lyrics-loading { display: flex; gap: 5px; justify-content: center; margin-top: 10px; }
+  .lyrics-loading span {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--fg-3);
+    animation: dotPulse 1.2s infinite ease-in-out;
+  }
+  .lyrics-loading span:nth-child(2) { animation-delay: 0.15s; }
+  .lyrics-loading span:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes dotPulse {
+    0%, 100% { opacity: 0.3; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.4); }
+  }
+  .lyrics-badge {
+    font-size: 8px; letter-spacing: 0.5px;
+    text-transform: uppercase;
+    background: var(--accent);
+    color: #fff;
+    padding: 2px 6px;
+    border-radius: var(--r-full);
+    font-weight: 700;
+    margin-top: 4px;
+    display: inline-block;
+  }
+
+  /* SEARCH PANE */
+  .pane-search-header {
+    display: flex; align-items: center;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--outline);
+    flex-shrink: 0;
+    gap: 6px;
+  }
+  .pane-search-input {
+    flex: 1; min-width: 0;
+    appearance: none; border: none; outline: none;
+    background: transparent;
+    color: var(--fg);
+    font-size: 13px;
+    height: 34px;
+    padding: 0 6px;
+  }
+  .pane-search-input::placeholder { color: var(--fg-3); }
+  .pane-search-results {
+    flex: 1; overflow-y: auto;
+    padding: 4px 0;
+  }
+  .pane-search-results::-webkit-scrollbar { width: 4px; }
+  .pane-search-results::-webkit-scrollbar-thumb { background: var(--outline); border-radius: 2px; }
+  .search-result {
+    display: grid;
+    grid-template-columns: 36px 1fr;
+    gap: 10px;
+    align-items: center;
+    padding: 6px 12px;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: var(--fg);
+    width: 100%;
+    text-align: left;
+    transition: background var(--t-fast);
+    min-width: 0;
+  }
+  .search-result:hover { background: rgba(255,255,255,0.06); }
+  [data-theme="light"] .search-result:hover { background: rgba(0,0,0,0.05); }
+  .search-result-cover {
+    width: 36px; height: 36px;
+    border-radius: 6px;
+    background: var(--bg-2);
+    background-size: cover; background-position: center;
+    flex-shrink: 0;
+  }
+  .search-result-info { min-width: 0; }
+  .search-result-title { font-size: 11px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .search-result-sub { font-size: 9px; color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .search-empty, .search-loading-msg {
+    padding: 24px 16px;
+    text-align: center;
+    color: var(--fg-2);
+    font-size: 11px;
+  }
+
+  /* ============== BOTTOM BAR ============== */
+  .bottom { display: flex; flex-direction: column; gap: 8px; padding: 8px 4px 0; }
   .meta-block {
     text-align: center;
     transition: filter var(--t-med), opacity var(--t-med);
@@ -323,40 +466,29 @@
   }
   .meta-block.revealing { filter: blur(8px); opacity: 0.2; }
   .meta-movie {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 1.6px;
-    text-transform: uppercase;
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 1.6px; text-transform: uppercase;
     color: var(--gold);
     margin-bottom: 4px;
     text-shadow: 0 1px 3px rgba(0,0,0,0.6);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .meta-title {
-    font-family: "DM Serif Display";
-    font-style: italic;
-    font-size: 26px;
-    line-height: 1.15;
-    margin: 0 0 4px;
-    color: var(--fg);
+    font-family: "DM Serif Display"; font-style: italic;
+    font-size: 22px; line-height: 1.15;
+    margin: 0 0 3px;
     text-shadow: 0 2px 8px rgba(0,0,0,0.7);
     word-break: break-word;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
     overflow: hidden;
   }
   .meta-artist {
-    font-size: 12px;
-    color: var(--fg-2);
+    font-size: 11px; color: var(--fg-2);
     text-shadow: 0 1px 3px rgba(0,0,0,0.6);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
 
-  /* progress + control row */
-  .player-row {
-    padding: 0 8px;
-  }
+  .player-row { padding: 0 8px; }
   .progress {
     position: relative;
     height: 3px;
@@ -373,40 +505,34 @@
     width: 0%;
     background: var(--fg);
     border-radius: var(--r-full);
-    pointer-events: none;
   }
   .progress .thumb {
-    position: absolute;
-    top: 50%; left: 0;
-    width: 12px; height: 12px;
+    position: absolute; top: 50%; left: 0;
+    width: 11px; height: 11px;
     background: var(--fg);
     border-radius: 50%;
     transform: translate(-50%, -50%) scale(0);
     transition: transform var(--t-fast);
-    pointer-events: none;
   }
   .progress:hover .thumb { transform: translate(-50%, -50%) scale(1); }
   .times {
     display: flex; justify-content: space-between;
     font-variant-numeric: tabular-nums;
-    font-size: 10px;
-    color: var(--fg-2);
-    margin-bottom: 8px;
+    font-size: 9px; color: var(--fg-2);
+    margin-bottom: 6px;
     text-shadow: 0 1px 2px rgba(0,0,0,0.6);
   }
-
   .play-controls {
-    display: flex; align-items: center; justify-content: center; gap: 16px;
-    margin-bottom: 12px;
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    margin-bottom: 8px;
   }
   .pc {
     appearance: none; border: none;
-    width: 44px; height: 44px;
+    width: 40px; height: 40px;
     border-radius: var(--r-full);
     background: rgba(0,0,0,0.45);
     color: var(--fg);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--outline-2);
     display: grid; place-items: center;
     cursor: pointer;
@@ -415,30 +541,23 @@
   [data-theme="light"] .pc { background: rgba(255,255,255,0.6); }
   .pc:hover { transform: scale(1.08); }
   .pc:active { transform: scale(0.92); }
-  .pc .material-symbols-outlined { font-size: 22px; }
+  .pc .material-symbols-outlined { font-size: 20px; }
   .pc.play {
-    width: 60px; height: 60px;
+    width: 54px; height: 54px;
     background: var(--fg);
     color: var(--bg-0);
     border-color: transparent;
   }
-  .pc.play .material-symbols-outlined {
-    font-size: 30px;
-    font-variation-settings: 'FILL' 1;
-  }
+  .pc.play .material-symbols-outlined { font-size: 28px; font-variation-settings: 'FILL' 1; }
   .pc.shuffle.spin .material-symbols-outlined { animation: spinAround .7s cubic-bezier(.5,.05,.5,.95) 1; }
   @keyframes spinAround { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 
-  /* era chips */
   .era-row {
-    display: flex; gap: 6px;
-    overflow-x: auto;
+    display: flex; gap: 5px;
     padding: 2px 4px;
-    scrollbar-width: none;
     justify-content: center;
     flex-wrap: wrap;
   }
-  .era-row::-webkit-scrollbar { display: none; }
   .chip {
     appearance: none;
     border: 1px solid var(--outline);
@@ -446,13 +565,11 @@
     backdrop-filter: blur(12px);
     color: var(--fg-2);
     border-radius: var(--r-full);
-    padding: 6px 12px;
-    font-size: 11px;
-    font-weight: 600;
+    padding: 5px 11px;
+    font-size: 10px; font-weight: 600;
     letter-spacing: 0.3px;
     cursor: pointer;
     white-space: nowrap;
-    flex-shrink: 0;
     transition: background var(--t-fast), color var(--t-fast), transform var(--t-fast);
   }
   [data-theme="light"] .chip { background: rgba(255,255,255,0.5); }
@@ -465,264 +582,46 @@
     font-weight: 700;
   }
 
-  /* ============== LYRICS OVERLAY (toggle) ============== */
-  .lyrics-sheet {
-    position: absolute;
-    inset: 0;
-    background: rgba(10, 7, 18, 0.95);
-    backdrop-filter: blur(30px);
-    -webkit-backdrop-filter: blur(30px);
-    z-index: 10;
-    display: flex;
-    flex-direction: column;
-    transform: translateY(100%);
-    transition: transform var(--t-med);
-    overflow: hidden;
-  }
-  [data-theme="light"] .lyrics-sheet { background: rgba(255, 251, 255, 0.97); }
-  .lyrics-sheet.show { transform: translateY(0); }
-  .lyrics-sheet-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 14px 16px;
-    padding-top: max(14px, env(safe-area-inset-top, 14px));
-    border-bottom: 1px solid var(--outline);
-    flex-shrink: 0;
-  }
-  .lyrics-sheet-title {
-    display: flex; flex-direction: column;
-    min-width: 0;
-  }
-  .lyrics-sheet-title .name {
-    font-family: "DM Serif Display"; font-style: italic;
-    font-size: 16px;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-  .lyrics-sheet-title .sub {
-    font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase;
-    color: var(--gold);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-  .lyrics-sheet-body {
-    flex: 1; min-height: 0;
-    position: relative;
-    overflow: hidden;
-  }
-  .lyrics-sheet-body::before, .lyrics-sheet-body::after {
-    content: ""; position: absolute; left: 0; right: 0;
-    height: 60px; pointer-events: none; z-index: 2;
-  }
-  .lyrics-sheet-body::before {
-    top: 0; background: linear-gradient(180deg, rgba(10,7,18,1) 0%, transparent 100%);
-  }
-  .lyrics-sheet-body::after {
-    bottom: 0; background: linear-gradient(0deg, rgba(10,7,18,1) 0%, transparent 100%);
-  }
-  [data-theme="light"] .lyrics-sheet-body::before {
-    background: linear-gradient(180deg, rgba(255,251,255,1) 0%, transparent 100%);
-  }
-  [data-theme="light"] .lyrics-sheet-body::after {
-    background: linear-gradient(0deg, rgba(255,251,255,1) 0%, transparent 100%);
-  }
-  .lyrics-track {
-    display: flex; flex-direction: column; align-items: center;
-    will-change: transform;
-    transition: transform 420ms cubic-bezier(.4,0,.2,1);
-    padding: 50% 16px;
-    text-align: center;
-  }
-  .lyrics-line {
-    font-family: "DM Serif Display";
-    font-style: italic;
-    font-size: 16px;
-    line-height: 1.5;
-    margin: 8px 0;
-    color: var(--fg-3);
-    transition: color var(--t-med), font-size var(--t-med), transform var(--t-med), opacity var(--t-med);
-    max-width: 100%;
-    word-wrap: break-word;
-    opacity: 0.55;
-  }
-  .lyrics-line.active {
-    color: var(--fg);
-    font-size: 26px;
-    font-weight: 600;
-    opacity: 1;
-    text-shadow: 0 0 24px color-mix(in srgb, var(--primary) 50%, transparent);
-    transform: scale(1.03);
-  }
-  .lyrics-line.near {
-    color: var(--fg-2);
-    font-size: 19px;
-    opacity: 0.85;
-  }
-  .lyrics-state {
-    position: absolute; inset: 0;
-    display: grid; place-items: center;
-    text-align: center;
-    padding: 0 24px;
-  }
-  .lyrics-state.hidden { display: none; }
-  .lyrics-state .material-symbols-outlined {
-    font-size: 36px;
-    color: var(--fg-3);
-    margin-bottom: 10px;
-  }
-  .lyrics-state .label {
-    font-size: 11px;
-    letter-spacing: 1.4px;
-    text-transform: uppercase;
-    color: var(--fg-2);
-    margin-bottom: 4px;
-  }
-  .lyrics-state .sub {
-    font-family: "DM Serif Display"; font-style: italic;
-    font-size: 18px;
-    color: var(--fg);
-  }
-  .lyrics-badge {
-    font-size: 9px; letter-spacing: 0.5px;
-    text-transform: uppercase;
-    background: var(--accent);
-    color: #fff;
-    padding: 3px 8px;
-    border-radius: var(--r-full);
-    font-weight: 700;
-    margin-top: 4px;
-    display: inline-block;
-  }
-  .lyrics-loading {
-    display: flex; gap: 6px; justify-content: center; margin-top: 14px;
-  }
-  .lyrics-loading span {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: var(--fg-3);
-    animation: dotPulse 1.2s infinite ease-in-out;
-  }
-  .lyrics-loading span:nth-child(2) { animation-delay: 0.15s; }
-  .lyrics-loading span:nth-child(3) { animation-delay: 0.3s; }
-  @keyframes dotPulse {
-    0%, 100% { opacity: 0.3; transform: scale(1); }
-    50% { opacity: 1; transform: scale(1.4); }
-  }
-
-  /* ============== SEARCH OVERLAY ============== */
-  .search-sheet {
-    position: absolute; inset: 0;
-    background: rgba(10, 7, 18, 0.97);
-    backdrop-filter: blur(20px);
-    z-index: 20;
-    display: flex; flex-direction: column;
-    transform: translateY(-100%);
-    transition: transform var(--t-med);
-  }
-  [data-theme="light"] .search-sheet { background: rgba(255, 251, 255, 0.98); }
-  .search-sheet.show { transform: translateY(0); }
-  .search-sheet-header {
-    display: flex; align-items: center; gap: 8px;
-    padding: 12px 16px;
-    padding-top: max(12px, env(safe-area-inset-top, 12px));
-    border-bottom: 1px solid var(--outline);
-  }
-  .search-sheet-input {
-    flex: 1; min-width: 0;
-    appearance: none; border: none; outline: none;
-    background: transparent;
-    color: var(--fg);
-    font-size: 16px;
-    height: 40px;
-    padding: 0 4px;
-  }
-  .search-sheet-input::placeholder { color: var(--fg-3); }
-  .search-results {
-    flex: 1;
-    overflow-y: auto;
-    padding: 4px 0 16px;
-  }
-  .search-result {
-    display: grid;
-    grid-template-columns: 48px 1fr;
-    gap: 12px;
-    align-items: center;
-    padding: 10px 16px;
-    cursor: pointer;
-    border: none;
-    background: transparent;
-    color: var(--fg);
-    width: 100%;
-    text-align: left;
-    transition: background var(--t-fast);
-    min-width: 0;
-  }
-  .search-result:hover { background: rgba(255,255,255,0.06); }
-  [data-theme="light"] .search-result:hover { background: rgba(0,0,0,0.05); }
-  .search-result-cover {
-    width: 48px; height: 48px;
-    border-radius: 8px;
-    background: var(--bg-2);
-    background-size: cover; background-position: center;
-    flex-shrink: 0;
-  }
-  .search-result-info { min-width: 0; }
-  .search-result-title { font-size: 14px; font-weight: 500;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .search-result-sub { font-size: 11px; color: var(--fg-2);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .search-empty, .search-loading-msg {
-    padding: 32px 24px;
-    text-align: center;
-    color: var(--fg-2);
-    font-size: 13px;
-  }
-
-  /* swipe hint pill */
   .swipe-hint {
     position: absolute;
-    top: 70px; left: 50%;
+    top: 64px; left: 50%;
     transform: translateX(-50%);
     background: rgba(0,0,0,0.5);
     color: var(--fg);
-    padding: 6px 14px;
+    padding: 5px 12px;
     border-radius: var(--r-full);
-    font-size: 11px;
-    font-weight: 500;
+    font-size: 10px; font-weight: 500;
     backdrop-filter: blur(12px);
-    z-index: 5;
-    opacity: 0;
+    z-index: 5; opacity: 0;
     transition: opacity var(--t-med);
     pointer-events: none;
   }
   [data-theme="light"] .swipe-hint { background: rgba(255,255,255,0.7); color: var(--bg-0); }
   .swipe-hint.show { opacity: 1; }
 
-  /* toast */
   .toast {
     position: absolute;
-    bottom: 80px; left: 50%;
+    bottom: 70px; left: 50%;
     transform: translate(-50%, 130%);
     background: rgba(0,0,0,0.85);
     color: #fff;
     border-radius: var(--r-md);
-    padding: 10px 16px;
-    font-size: 12px;
-    font-weight: 500;
+    padding: 9px 14px;
+    font-size: 11px; font-weight: 500;
     z-index: 60;
     max-width: calc(100% - 32px);
     text-align: center;
     transition: transform var(--t-med), opacity var(--t-med);
-    opacity: 0;
-    pointer-events: none;
+    opacity: 0; pointer-events: none;
     backdrop-filter: blur(20px);
   }
   [data-theme="light"] .toast { background: rgba(255,255,255,0.95); color: var(--bg-0); }
   .toast.show { transform: translate(-50%, 0); opacity: 1; }
 
-  /* boot */
   .booting {
     position: fixed; inset: 0;
     display: grid; place-items: center;
-    z-index: 200;
-    background: var(--bg-0);
+    z-index: 200; background: var(--bg-0);
   }
   .booting.hidden { display: none; }
   .boot-card { text-align: center; padding: 24px; max-width: 320px; }
@@ -742,19 +641,22 @@
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   }
+
+  @media (max-width: 380px) {
+    .cover-stage { width: min(100%, 240px); }
+    .actions { gap: 12px; }
+    .action { width: 44px; height: 44px; }
+  }
 </style>
 </head>
 <body>
 
 <div class="app">
   <div class="reel" id="reel">
-    <!-- Blurred background -->
     <div class="reel-bg" id="reel-bg"></div>
-
-    <!-- All foreground content -->
     <div class="reel-content surface" id="surface">
 
-      <!-- Top: brand + actions -->
+      <!-- TOP STRIP -->
       <div class="top-strip">
         <div class="brand">
           <span class="brand-logo" aria-hidden="true">
@@ -763,19 +665,53 @@
           <span>YADRCHA</span>
         </div>
         <div class="spacer"></div>
-        <button class="icon-pill" id="btn-search" type="button" aria-label="Search">
-          <span class="material-symbols-outlined">search</span>
-        </button>
         <button class="icon-pill" id="btn-theme" type="button" aria-label="Toggle theme">
           <span class="material-symbols-outlined" id="btn-theme-icon">dark_mode</span>
         </button>
       </div>
 
-      <!-- Center stage: cover + actions -->
+      <!-- STAGE: cover (with flip) + action column -->
       <div class="stage">
-        <div class="cover-wrap" id="cover-wrap">
-          <div class="cover" id="cover"></div>
+        <div class="cover-stage" id="cover-stage">
+          <!-- FRONT: cover image -->
+          <div class="face front" id="cover"></div>
+          <!-- BACK: lyrics or search (swap by class) -->
+          <div class="face back" id="back-face">
+            <!-- Lyrics pane -->
+            <div class="back-pane pane-lyrics" id="pane-lyrics">
+              <div class="pane-lyrics-header">
+                <div class="pane-lyrics-title" id="pane-lyrics-title">Lyrics</div>
+                <button class="icon-pill" id="btn-flip-back" type="button" aria-label="Back to cover" style="width:30px;height:30px">
+                  <span class="material-symbols-outlined" style="font-size:16px">close</span>
+                </button>
+              </div>
+              <div class="pane-lyrics-body">
+                <div class="lyrics-track" id="lyrics-track"></div>
+                <div class="lyrics-state" id="lyrics-state">
+                  <div>
+                    <span class="material-symbols-outlined" id="lyrics-state-icon">lyrics</span>
+                    <div class="label" id="lyrics-state-label">Lyrics</div>
+                    <div class="sub" id="lyrics-state-text">Tap to load</div>
+                    <div class="lyrics-loading" id="lyrics-loading" hidden><span></span><span></span><span></span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Search pane -->
+            <div class="back-pane pane-search" id="pane-search">
+              <div class="pane-search-header">
+                <span class="material-symbols-outlined" style="font-size:18px;color:var(--fg-2);margin-left:4px">search</span>
+                <input id="search-input" class="pane-search-input" type="search" autocomplete="off" placeholder="Search…" aria-label="Search" />
+                <button class="icon-pill" id="btn-flip-back-2" type="button" aria-label="Back to cover" style="width:30px;height:30px">
+                  <span class="material-symbols-outlined" style="font-size:16px">close</span>
+                </button>
+              </div>
+              <div class="pane-search-results" id="search-results"></div>
+            </div>
+          </div>
         </div>
+
+        <!-- ACTION COLUMN — outside the card -->
         <div class="actions">
           <div class="action-group">
             <button class="action" id="btn-like" type="button" aria-label="Like" aria-pressed="false">
@@ -784,10 +720,16 @@
             <span class="action-label">Like</span>
           </div>
           <div class="action-group">
-            <button class="action" id="btn-lyrics" type="button" aria-label="Toggle lyrics" aria-pressed="false">
+            <button class="action" id="btn-lyrics" type="button" aria-label="Show lyrics" aria-pressed="false">
               <span class="material-symbols-outlined">lyrics</span>
             </button>
             <span class="action-label">Lyrics</span>
+          </div>
+          <div class="action-group">
+            <button class="action" id="btn-search" type="button" aria-label="Search" aria-pressed="false">
+              <span class="material-symbols-outlined">search</span>
+            </button>
+            <span class="action-label">Search</span>
           </div>
           <div class="action-group">
             <button class="action" id="btn-mystery" type="button" aria-label="Mystery">
@@ -798,14 +740,13 @@
         </div>
       </div>
 
-      <!-- Bottom: meta + progress + controls + era -->
+      <!-- BOTTOM -->
       <div class="bottom">
         <div class="meta-block" id="meta">
           <div class="meta-movie" id="meta-movie">— Telugu film —</div>
           <h1 class="meta-title" id="meta-title">Random Telugu hits</h1>
           <div class="meta-artist" id="meta-artist">Press shuffle to begin</div>
         </div>
-
         <div class="player-row">
           <div class="progress" id="progress" role="slider" tabindex="0" aria-label="Track position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
             <div class="filled" id="filled"></div>
@@ -830,7 +771,6 @@
             </button>
           </div>
         </div>
-
         <div class="era-row" role="group" aria-label="Era filter">
           <button class="chip" data-era="all" aria-pressed="true" type="button">All</button>
           <button class="chip" data-era="vintage" aria-pressed="false" type="button">Vintage</button>
@@ -840,50 +780,10 @@
         </div>
       </div>
 
-      <!-- Swipe hint -->
       <div class="swipe-hint" id="swipe-hint">↕ Swipe to change song</div>
-
-      <!-- Toast -->
       <div class="toast" id="toast" role="status" aria-live="polite"></div>
-
-    </div><!-- /reel-content -->
-
-    <!-- LYRICS SHEET (slides up from bottom on toggle) -->
-    <div class="lyrics-sheet" id="lyrics-sheet" aria-hidden="true">
-      <div class="lyrics-sheet-header">
-        <div class="lyrics-sheet-title">
-          <div class="sub" id="lyrics-sheet-movie">Lyrics</div>
-          <div class="name" id="lyrics-sheet-title">—</div>
-        </div>
-        <button class="icon-pill" id="btn-lyrics-close" type="button" aria-label="Close lyrics">
-          <span class="material-symbols-outlined">close</span>
-        </button>
-      </div>
-      <div class="lyrics-sheet-body">
-        <div class="lyrics-track" id="lyrics-track"></div>
-        <div class="lyrics-state" id="lyrics-state">
-          <div>
-            <span class="material-symbols-outlined" id="lyrics-state-icon">music_note</span>
-            <div class="label" id="lyrics-state-label">Lyrics</div>
-            <div class="sub" id="lyrics-state-text">Press the lyrics icon to load</div>
-            <div class="lyrics-loading" id="lyrics-loading" hidden><span></span><span></span><span></span></div>
-          </div>
-        </div>
-      </div>
     </div>
-
-    <!-- SEARCH SHEET (slides down from top) -->
-    <div class="search-sheet" id="search-sheet" aria-hidden="true">
-      <div class="search-sheet-header">
-        <button class="icon-pill" id="btn-search-close" type="button" aria-label="Close search">
-          <span class="material-symbols-outlined">arrow_back</span>
-        </button>
-        <input id="search-input" class="search-sheet-input" type="search" autocomplete="off" placeholder="Search any Telugu song, movie, artist…" aria-label="Search" />
-      </div>
-      <div class="search-results" id="search-results"></div>
-    </div>
-
-  </div><!-- /reel -->
+  </div>
 </div>
 
 <audio id="audio" preload="auto" crossorigin="anonymous"></audio>
@@ -910,23 +810,20 @@
   const HISTORY_KEY = 'yadrcha.history.v1';
   const HISTORY_MAX = 80;
   const THEME_KEY = 'yadrcha.theme';
+  const LYRICS_CACHE_PREFIX = 'yadrcha.lyrics.';
+  const LYRICS_CACHE_TTL = 30 * 24 * 60 * 60 * 1000;
   const AI_LIKES_THRESHOLD = 5;
   const AI_TIMEOUT_MS = 800;
   const AI_CANDIDATE_COUNT = 20;
 
-  // Compilation-album keywords — used to FILTER OUT non-fresh songs from
-  // the Latest era. iTunes/JioSaavn re-tag old songs to the year of a
-  // compilation, so a 2003 song lands under 2026 if it's on a
-  // "Tollywood Patriotic Songs 2026" album. These never belong in Latest.
   const COMPILATION_RE = /\b(collection|best of|hits of|songs of|compilation|jukebox|patriotic|all time|chartbusters|top hits|favorites|romantic hits|dance hits|super hits|melody hits|throwback|evergreen|special hit|popular hit|golden hit)\b/i;
-
   function isCompilation(movie) { return COMPILATION_RE.test(movie || ''); }
 
-  /* ---------- THEME ---------- */
+  /* THEME */
   function detectInitialTheme() {
     const saved = localStorage.getItem(THEME_KEY);
     if (saved === 'light' || saved === 'dark') return saved;
-    return 'dark'; // default — reels feel best dark
+    return 'dark';
   }
   function applyTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
@@ -934,7 +831,7 @@
     $('btn-theme-icon').textContent = theme === 'dark' ? 'light_mode' : 'dark_mode';
   }
 
-  /* ---------- STATE ---------- */
+  /* STATE */
   const state = {
     catalog: [],
     current: null,
@@ -944,7 +841,7 @@
     isMystery: false,
     likes: new Set(JSON.parse(localStorage.getItem('yadrcha.likes') || '[]')),
     theme: detectInitialTheme(),
-    lyricsOpen: false,
+    cardMode: 'front',  // 'front' | 'lyrics' | 'search'
   };
   const lyricsState = {
     lines: null,
@@ -952,7 +849,6 @@
     forSongId: null,
     abort: null,
     isTranslated: false,
-    fetched: false,    // have we tried for the current song
     fetchedSongId: null,
   };
 
@@ -962,7 +858,7 @@
     try { localStorage.setItem(HISTORY_KEY, JSON.stringify(state.history)); } catch (_) {}
   }
 
-  /* ---------- UTILS ---------- */
+  /* UTILS */
   const fmt = (t) => isFinite(t) && t > 0 ? Math.floor(t / 60) + ':' + Math.floor(t % 60).toString().padStart(2, '0') : '0:00';
   function pickEra(year) {
     if (!year) return 'all';
@@ -979,7 +875,7 @@
     showToast._t = setTimeout(() => t.classList.remove('show'), ms);
   }
 
-  /* ---------- CATALOG ---------- */
+  /* CATALOG */
   async function loadCatalog() {
     try {
       const url = new URL('catalog.json', location.href).href + '?t=' + Date.now();
@@ -1007,6 +903,7 @@
     return slim.map((s) => ({
       id: s.i, title: s.t, artist: s.a, movie: s.m,
       url: s.u, cover: s.c, year: s.y, duration: s.d,
+      plays: s.p || 0,
       era: pickEra(s.y),
     }));
   }
@@ -1020,14 +917,42 @@
     }
   }
 
-  /* ---------- POOL / RANDOM ---------- */
+  /* POOL & POPULARITY-WEIGHTED RANDOM */
   function pool() {
     if (state.era === 'all') return state.catalog;
     if (state.era === 'latest') {
-      // Strict latest — only year >= LATEST_FROM_YEAR AND not a compilation album
       return state.catalog.filter((s) => s.year && s.year >= LATEST_FROM_YEAR && !isCompilation(s.movie));
     }
     return state.catalog.filter((s) => s.era === state.era);
+  }
+  // Weighted random — songs with more plays come up more often, but not
+  // always. Power 0.35 keeps a little variety; pure 1.0 would make obscure
+  // songs almost never play.
+  function weightedSample(items, n) {
+    if (!items.length) return [];
+    const out = [];
+    const used = new Set();
+    const weights = items.map((s) => Math.pow((s.plays || 1) + 1, 0.35));
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+    let attempts = 0;
+    while (out.length < Math.min(n, items.length) && attempts < n * 5) {
+      attempts++;
+      let r = Math.random() * totalWeight;
+      for (let i = 0; i < items.length; i++) {
+        r -= weights[i];
+        if (r <= 0) {
+          if (!used.has(i)) { used.add(i); out.push(items[i]); }
+          break;
+        }
+      }
+    }
+    // fill up if still short
+    if (out.length < Math.min(n, items.length)) {
+      for (let i = 0; i < items.length && out.length < n; i++) {
+        if (!used.has(i)) { used.add(i); out.push(items[i]); }
+      }
+    }
+    return out;
   }
   function pickRandom() {
     const p = pool();
@@ -1035,10 +960,10 @@
     const recent = new Set(state.history.slice(-Math.min(p.length - 1, 30)));
     const fresh = p.filter((s) => !recent.has(s.id) && (!state.current || s.id !== state.current.id));
     const choices = fresh.length ? fresh : p;
-    return choices[Math.floor(Math.random() * choices.length)];
+    return weightedSample(choices, 1)[0];
   }
 
-  /* ---------- AI / HEURISTIC RECOMMENDER ---------- */
+  /* AI / HEURISTIC */
   function buildTaste() {
     const liked = state.catalog.filter((s) => state.likes.has(s.id));
     if (!liked.length) return null;
@@ -1068,16 +993,7 @@
     const recent = new Set(state.history.slice(-30));
     const curId = state.current?.id;
     const fresh = p.filter((s) => !recent.has(s.id) && s.id !== curId);
-    const src = fresh.length >= n ? fresh : (fresh.length ? fresh : p);
-    const out = [];
-    const used = new Set();
-    while (out.length < Math.min(n, src.length)) {
-      const i = Math.floor(Math.random() * src.length);
-      if (used.has(i)) continue;
-      used.add(i);
-      out.push(src[i]);
-    }
-    return out;
+    return weightedSample(fresh.length ? fresh : p, n);
   }
   function heuristicPick(candidates) {
     const taste = buildTaste();
@@ -1091,7 +1007,9 @@
       const eraMatch = c.era === taste.topEra ? 1 : 0;
       const yearProx = c.year ? Math.max(0, 1 - Math.abs(c.year - taste.yearCentroid) / 15) : 0;
       const histPenalty = recent.has(c.id) ? 1 : 0;
-      const score = 3 * artistMatch + 2 * movieMatch + 1.5 * eraMatch + 1 * yearProx - 4 * histPenalty + 0.3 * Math.random();
+      const popBonus = Math.log10((c.plays || 1) + 10) / 8;
+      const score = 3 * artistMatch + 2 * movieMatch + 1.5 * eraMatch + 1 * yearProx
+                  - 4 * histPenalty + popBonus + 0.3 * Math.random();
       if (score > bestScore) { bestScore = score; best = c; }
     }
     return best || candidates[0];
@@ -1130,24 +1048,24 @@
     if (!cands.length) { nextPickCache = null; return; }
     const taste = buildTaste();
     if (!taste || taste.likedCount < AI_LIKES_THRESHOLD) {
-      nextPickCache = cands[Math.floor(Math.random() * cands.length)];
+      nextPickCache = cands[0]; // already weighted
       return;
     }
     const ai = await aiPick(cands);
     nextPickCache = ai || heuristicPick(cands);
+    // Background pre-fetch lyrics for the next pick
+    if (nextPickCache) prefetchLyricsBackground(nextPickCache);
   }
   function pickNext() {
     if (nextPickCache) { const p = nextPickCache; nextPickCache = null; return p; }
     const cands = sampleCandidates(AI_CANDIDATE_COUNT);
     if (!cands.length) return null;
     const taste = buildTaste();
-    if (!taste || taste.likedCount < AI_LIKES_THRESHOLD) {
-      return cands[Math.floor(Math.random() * cands.length)];
-    }
+    if (!taste || taste.likedCount < AI_LIKES_THRESHOLD) return cands[0];
     return heuristicPick(cands);
   }
 
-  /* ---------- DES decryption (search → play) ---------- */
+  /* DES decryption */
   function desDecryptUrl(b64) {
     if (!window.CryptoJS) return null;
     try {
@@ -1160,7 +1078,7 @@
     } catch (e) { return null; }
   }
 
-  /* ---------- LYRICS (fetched only on toggle) ---------- */
+  /* ============== LYRICS — fast: parallel fetch + cache + prefetch ============== */
   function parseLRC(text) {
     if (!text) return null;
     const out = [];
@@ -1182,37 +1100,56 @@
     const indic = (sample.match(/[ऀ-෿]/g) || []).length;
     return latin > 30 && indic < 10;
   }
-  async function fetchLyrics(song, signal) {
+  function getLyricsCache(songId) {
+    try {
+      const raw = localStorage.getItem(LYRICS_CACHE_PREFIX + songId);
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      if (Date.now() - obj.ts > LYRICS_CACHE_TTL) return null;
+      return obj.data;
+    } catch (_) { return null; }
+  }
+  function setLyricsCache(songId, data) {
+    try { localStorage.setItem(LYRICS_CACHE_PREFIX + songId, JSON.stringify({ ts: Date.now(), data })); }
+    catch (_) {}
+  }
+  // Race all URL variants in parallel — first synced result wins.
+  async function fetchLyricsRaceParallel(song, signal) {
     const enc = encodeURIComponent;
-    const tryUrls = [
+    const urls = [
       `https://lrclib.net/api/get?artist_name=${enc(song.artist || '')}&track_name=${enc(song.title || '')}&album_name=${enc(song.movie || '')}&duration=${song.duration || ''}`,
       `https://lrclib.net/api/get?artist_name=${enc(song.artist || '')}&track_name=${enc(song.title || '')}&album_name=${enc(song.movie || '')}`,
       `https://lrclib.net/api/get?artist_name=${enc(song.artist || '')}&track_name=${enc(song.title || '')}`,
     ];
-    for (const url of tryUrls) {
-      try {
-        const r = await fetch(url, { signal });
-        if (!r.ok) continue;
-        const data = await r.json();
-        if (data && data.syncedLyrics) {
-          const parsed = parseLRC(data.syncedLyrics);
-          if (parsed) return { lines: parsed, raw: data.syncedLyrics };
-        }
-      } catch (e) { if (e.name === 'AbortError') return null; }
-    }
-    try {
+    return new Promise((resolve) => {
+      let resolved = false;
+      let pending = urls.length + 1;
+      const finishIfNeeded = () => { if (!resolved && --pending === 0) resolve(null); };
+      urls.forEach((u) => {
+        fetch(u, { signal }).then((r) => r.ok ? r.json() : null).then((data) => {
+          if (resolved) return;
+          if (data?.syncedLyrics) {
+            const parsed = parseLRC(data.syncedLyrics);
+            if (parsed) { resolved = true; resolve({ lines: parsed, raw: data.syncedLyrics }); return; }
+          }
+          finishIfNeeded();
+        }).catch(() => finishIfNeeded());
+      });
+      // Search fallback runs in parallel too
       const q = (song.title || '') + ' ' + (song.movie || '');
-      const r = await fetch(`https://lrclib.net/api/search?q=${enc(q.trim())}`, { signal });
-      if (r.ok) {
-        const arr = await r.json();
-        const match = Array.isArray(arr) && arr.find((x) => x && x.syncedLyrics);
-        if (match) {
-          const parsed = parseLRC(match.syncedLyrics);
-          if (parsed) return { lines: parsed, raw: match.syncedLyrics };
-        }
-      }
-    } catch (e) { if (e.name === 'AbortError') return null; }
-    return null;
+      fetch(`https://lrclib.net/api/search?q=${enc(q.trim())}`, { signal })
+        .then((r) => r.ok ? r.json() : null)
+        .then((arr) => {
+          if (resolved) return;
+          const match = Array.isArray(arr) && arr.find((x) => x && x.syncedLyrics);
+          if (match) {
+            const parsed = parseLRC(match.syncedLyrics);
+            if (parsed) { resolved = true; resolve({ lines: parsed, raw: match.syncedLyrics }); return; }
+          }
+          finishIfNeeded();
+        })
+        .catch(() => finishIfNeeded());
+    });
   }
   async function translateLyrics(rawLrc, signal) {
     const lines = rawLrc.split('\n').filter(Boolean);
@@ -1239,8 +1176,29 @@
         merged.push(stamps[i].stamp + ' ' + t);
       }
       return merged.join('\n');
-    } catch (e) { return null; }
+    } catch (_) { return null; }
   }
+  // Background prefetch — silent, caches result
+  async function prefetchLyricsBackground(song) {
+    if (!song || getLyricsCache(song.id)) return;
+    try {
+      const got = await fetchLyricsRaceParallel(song, undefined);
+      if (!got) { setLyricsCache(song.id, { lines: null, isTranslated: false }); return; }
+      let lines = got.lines;
+      let isTranslated = false;
+      if (isLatinScript(got.lines.map((l) => l.text).join(' '))) {
+        const translatedRaw = await translateLyrics(got.raw, undefined);
+        if (translatedRaw) {
+          const teluguLines = parseLRC(translatedRaw);
+          if (teluguLines && teluguLines.length) { lines = teluguLines; isTranslated = true; }
+        }
+      }
+      setLyricsCache(song.id, { lines, isTranslated });
+    } catch (_) {
+      setLyricsCache(song.id, { lines: null, isTranslated: false });
+    }
+  }
+
   function showLyricsState(text, kind, loading) {
     $('lyrics-state').classList.remove('hidden');
     $('lyrics-state-text').textContent = text;
@@ -1259,7 +1217,6 @@
     lyricsState.activeIdx = -1;
     lyricsState.forSongId = null;
     lyricsState.isTranslated = false;
-    lyricsState.fetched = false;
     lyricsState.fetchedSongId = null;
     if (lyricsState.abort) lyricsState.abort.abort();
     $('lyrics-track').innerHTML = '';
@@ -1304,7 +1261,7 @@
       else if (Math.abs(i - idx) === 1) el.classList.add('near');
     }
     if (activeEl) {
-      const body = $('lyrics-sheet').querySelector('.lyrics-sheet-body');
+      const body = $('pane-lyrics').querySelector('.pane-lyrics-body');
       const bodyH = body.clientHeight;
       const lineCenter = activeEl.offsetTop + activeEl.offsetHeight / 2;
       track.style.transform = `translateY(${(bodyH / 2) - lineCenter}px)`;
@@ -1313,12 +1270,26 @@
   async function loadLyricsForCurrentSong() {
     const song = state.current;
     if (!song) return;
-    if (lyricsState.fetchedSongId === song.id) return; // already fetched
+    if (lyricsState.fetchedSongId === song.id) return;
+    // Cache hit?
+    const cached = getLyricsCache(song.id);
+    if (cached) {
+      lyricsState.fetchedSongId = song.id;
+      if (cached.lines && cached.lines.length) {
+        lyricsState.lines = cached.lines;
+        lyricsState.forSongId = song.id;
+        lyricsState.isTranslated = !!cached.isTranslated;
+        renderLyricsLines();
+      } else {
+        showLyricsState('No synced lyrics for this song', 'instrumental', false);
+      }
+      return;
+    }
+    // Live fetch with loading dots
     if (lyricsState.abort) lyricsState.abort.abort();
     lyricsState.abort = new AbortController();
-    const sig = lyricsState.abort.signal;
     showLyricsState('Searching for lyrics…', 'searching', true);
-    const got = await fetchLyrics(song, sig);
+    const got = await fetchLyricsRaceParallel(song, lyricsState.abort.signal);
     if (state.current?.id !== song.id) return;
     lyricsState.fetchedSongId = song.id;
     if (got) {
@@ -1326,10 +1297,12 @@
       lyricsState.forSongId = song.id;
       lyricsState.isTranslated = false;
       renderLyricsLines();
+      // Cache immediately so subsequent toggles are instant
+      setLyricsCache(song.id, { lines: got.lines, isTranslated: false });
       // Translate to Telugu if English
       if (isLatinScript(got.lines.map((l) => l.text).join(' '))) {
         showLyricsState('Translating to Telugu…', 'searching', true);
-        const translatedRaw = await translateLyrics(got.raw, sig);
+        const translatedRaw = await translateLyrics(got.raw, lyricsState.abort.signal);
         if (state.current?.id !== song.id) return;
         if (translatedRaw) {
           const teluguLines = parseLRC(translatedRaw);
@@ -1338,38 +1311,57 @@
             lyricsState.activeIdx = -1;
             lyricsState.isTranslated = true;
             renderLyricsLines();
-          } else {
-            renderLyricsLines();
+            setLyricsCache(song.id, { lines: teluguLines, isTranslated: true });
+            return;
           }
-        } else {
-          renderLyricsLines();
         }
+        renderLyricsLines();
       }
     } else {
       showLyricsState('No synced lyrics for this song', 'instrumental', false);
+      setLyricsCache(song.id, { lines: null, isTranslated: false });
     }
-  }
-  function openLyrics() {
-    state.lyricsOpen = true;
-    $('lyrics-sheet').classList.add('show');
-    $('btn-lyrics').classList.add('toggle-on');
-    $('btn-lyrics').setAttribute('aria-pressed', 'true');
-    if (state.current) {
-      $('lyrics-sheet-title').textContent = state.current.title || '';
-      $('lyrics-sheet-movie').textContent = state.current.movie || 'Telugu film';
-      loadLyricsForCurrentSong();
-    } else {
-      showLyricsState('Press shuffle to play a song first', 'instrumental', false);
-    }
-  }
-  function closeLyrics() {
-    state.lyricsOpen = false;
-    $('lyrics-sheet').classList.remove('show');
-    $('btn-lyrics').classList.remove('toggle-on');
-    $('btn-lyrics').setAttribute('aria-pressed', 'false');
   }
 
-  /* ---------- AUDIO ---------- */
+  /* ============== FLIP CARD STATE MACHINE ============== */
+  function setBackPane(mode) {
+    // mode: 'lyrics' | 'search'
+    $('pane-lyrics').classList.toggle('show', mode === 'lyrics');
+    $('pane-search').classList.toggle('show', mode === 'search');
+  }
+  function flipToBack(mode) {
+    state.cardMode = mode;
+    setBackPane(mode);
+    $('cover-stage').classList.add('flipped');
+    $('btn-lyrics').classList.toggle('toggle-on', mode === 'lyrics');
+    $('btn-search').classList.toggle('toggle-on', mode === 'search');
+    if (mode === 'lyrics') {
+      if (state.current) {
+        $('pane-lyrics-title').textContent = `${state.current.title} · ${state.current.movie || 'Telugu'}`;
+        loadLyricsForCurrentSong();
+      } else {
+        showLyricsState('Press shuffle first', 'instrumental', false);
+      }
+    } else if (mode === 'search') {
+      setTimeout(() => $('search-input').focus(), 350);
+    }
+  }
+  function flipToFront() {
+    state.cardMode = 'front';
+    $('cover-stage').classList.remove('flipped');
+    $('btn-lyrics').classList.remove('toggle-on');
+    $('btn-search').classList.remove('toggle-on');
+  }
+  function toggleLyrics() {
+    if (state.cardMode === 'lyrics') flipToFront();
+    else flipToBack('lyrics');
+  }
+  function toggleSearch() {
+    if (state.cardMode === 'search') flipToFront();
+    else flipToBack('search');
+  }
+
+  /* AUDIO */
   const audio = $('audio');
   audio.addEventListener('play',  () => { state.isPlaying = true;  renderPlayState(); });
   audio.addEventListener('pause', () => { state.isPlaying = false; renderPlayState(); });
@@ -1383,7 +1375,7 @@
     $('time-cur').textContent = fmt(cur);
     $('time-tot').textContent = fmt(tot);
     $('progress').setAttribute('aria-valuenow', Math.round(pct));
-    if (state.lyricsOpen && lyricsState.lines && lyricsState.forSongId === state.current?.id) {
+    if (state.cardMode === 'lyrics' && lyricsState.lines && lyricsState.forSongId === state.current?.id) {
       updateActiveLyric();
     }
   });
@@ -1392,7 +1384,7 @@
     setTimeout(nextRandom, 200);
   });
 
-  /* ---------- PLAYBACK ---------- */
+  /* PLAYBACK */
   function play(song, opts = {}) {
     if (!song) return;
     if (state.current) pushHistory(state.current.id);
@@ -1405,13 +1397,14 @@
     renderNowPlaying();
     updateMediaSession(song);
     clearLyrics();
-    // If lyrics sheet is open, fetch lyrics for new song
-    if (state.lyricsOpen) {
-      $('lyrics-sheet-title').textContent = song.title;
-      $('lyrics-sheet-movie').textContent = song.movie || 'Telugu film';
+    // If lyrics card is currently visible, reload for new song
+    if (state.cardMode === 'lyrics') {
+      $('pane-lyrics-title').textContent = `${song.title} · ${song.movie || 'Telugu'}`;
       setTimeout(() => loadLyricsForCurrentSong(), 50);
     }
-    setTimeout(() => prefetchNext(), 200);
+    // Background pre-fetch lyrics so toggling later is instant
+    setTimeout(() => prefetchLyricsBackground(song), 300);
+    setTimeout(() => prefetchNext(), 400);
   }
   function togglePlay() {
     if (!state.current) { nextRandom(); return; }
@@ -1432,7 +1425,7 @@
     }
   }
 
-  /* ---------- RENDER ---------- */
+  /* RENDER */
   function renderPlayState() {
     $('btn-play-icon').textContent = state.isPlaying ? 'pause' : 'play_arrow';
     $('btn-play').setAttribute('aria-label', state.isPlaying ? 'Pause' : 'Play');
@@ -1467,7 +1460,7 @@
     });
   }
 
-  /* ---------- MEDIA SESSION ---------- */
+  /* MEDIA SESSION */
   function wireMediaSession() {
     if (!('mediaSession' in navigator)) return;
     navigator.mediaSession.setActionHandler('play',  () => togglePlay());
@@ -1485,7 +1478,7 @@
     } catch (_) {}
   }
 
-  /* ---------- HEART BURST ---------- */
+  /* HEART BURST */
   function heartBurst(button) {
     const rect = button.getBoundingClientRect();
     for (let i = 0; i < 6; i++) {
@@ -1502,15 +1495,14 @@
     }
   }
 
-  /* ---------- VERTICAL SWIPE (reels) ---------- */
+  /* SWIPE */
   function wireSwipe() {
     const reel = $('reel');
     let startY = 0, startX = 0, dy = 0, dx = 0, swiping = false;
     function onStart(e) {
-      // Don't swipe on interactive elements
-      if (e.target.closest('button, input, .progress, .actions, .play-controls, .era-row, .lyrics-sheet, .search-sheet, .top-strip')) {
-        swiping = false;
-        return;
+      // Don't swipe if interacting with controls or back panes
+      if (e.target.closest('button, input, .progress, .actions, .play-controls, .era-row, .top-strip, .face.back, .pane-lyrics, .pane-search')) {
+        swiping = false; return;
       }
       const t = e.touches ? e.touches[0] : e;
       startY = t.clientY; startX = t.clientX; dy = 0; dx = 0; swiping = true;
@@ -1520,7 +1512,6 @@
       const t = e.touches ? e.touches[0] : e;
       dy = t.clientY - startY;
       dx = t.clientX - startX;
-      // Cancel if mostly horizontal
       if (Math.abs(dx) > Math.abs(dy) * 1.4) { onCancel(); return; }
       reel.classList.toggle('swipe-up', dy < -8);
       reel.classList.toggle('swipe-down', dy > 8);
@@ -1531,26 +1522,20 @@
       reel.classList.remove('swipe-up', 'swipe-down');
       if (Math.abs(dy) > 70) {
         if (dy < 0) {
-          // swipe up = next
           reel.classList.add('exit-up');
           setTimeout(() => {
             reel.classList.remove('exit-up');
             reel.classList.add('enter-bottom');
             nextRandom();
-            requestAnimationFrame(() => {
-              reel.classList.remove('enter-bottom');
-            });
+            requestAnimationFrame(() => reel.classList.remove('enter-bottom'));
           }, 280);
         } else {
-          // swipe down = prev
           reel.classList.add('exit-down');
           setTimeout(() => {
             reel.classList.remove('exit-down');
             reel.classList.add('enter-top');
             prev();
-            requestAnimationFrame(() => {
-              reel.classList.remove('enter-top');
-            });
+            requestAnimationFrame(() => reel.classList.remove('enter-top'));
           }, 280);
         }
       }
@@ -1563,37 +1548,26 @@
     reel.addEventListener('touchmove', onMove, { passive: true });
     reel.addEventListener('touchend', onEnd);
     reel.addEventListener('touchcancel', onCancel);
-    // Mouse swipe (desktop)
     let mouseDown = false;
     reel.addEventListener('mousedown', (e) => { mouseDown = true; onStart(e); });
     reel.addEventListener('mousemove', (e) => { if (mouseDown) onMove(e); });
     reel.addEventListener('mouseup', () => { if (mouseDown) { mouseDown = false; onEnd(); } });
     reel.addEventListener('mouseleave', () => { if (mouseDown) { mouseDown = false; onCancel(); } });
-    // Mouse wheel — also swipe-like
     let wheelLock = false;
     reel.addEventListener('wheel', (e) => {
       if (wheelLock) return;
       if (Math.abs(e.deltaY) < 30) return;
+      // Don't trigger swipe if mouse is over a back pane (allow scrolling)
+      if (e.target.closest('.face.back, .pane-search-results, .pane-lyrics-body')) return;
       wheelLock = true;
       setTimeout(() => { wheelLock = false; }, 600);
-      if (e.deltaY > 0) nextRandom();
-      else prev();
+      if (e.deltaY > 0) nextRandom(); else prev();
     }, { passive: true });
   }
 
-  /* ---------- SEARCH ---------- */
+  /* SEARCH */
   let searchTimer = null;
   let searchAbort = null;
-  function openSearch() {
-    $('search-sheet').classList.add('show');
-    setTimeout(() => $('search-input').focus(), 150);
-  }
-  function closeSearch() {
-    $('search-sheet').classList.remove('show');
-    $('search-input').value = '';
-    $('search-results').innerHTML = '';
-    if (searchAbort) searchAbort.abort();
-  }
   async function performSearch(q) {
     const results = $('search-results');
     if (q.length < 2) { results.innerHTML = ''; return; }
@@ -1605,7 +1579,7 @@
       if (!r.ok) { results.innerHTML = '<div class="search-empty">Search failed</div>'; return; }
       const data = await r.json();
       const items = data.results || [];
-      if (!items.length) { results.innerHTML = '<div class="search-empty">No matches in JioSaavn</div>'; return; }
+      if (!items.length) { results.innerHTML = '<div class="search-empty">No matches</div>'; return; }
       results.innerHTML = items.map((s) =>
         `<button class="search-result" data-id="${s.id}" type="button">
            <div class="search-result-cover" style="background-image:url('${s.cover}')"></div>
@@ -1633,17 +1607,19 @@
       const song = {
         id: data.id, title: data.title, artist: data.artist, movie: data.movie,
         url, cover: data.cover, year: data.year, duration: data.duration,
-        era: pickEra(data.year),
+        plays: 0, era: pickEra(data.year),
       };
       if (!state.catalog.find((s) => s.id === song.id)) state.catalog.push(song);
-      closeSearch();
+      flipToFront();
+      $('search-input').value = '';
+      $('search-results').innerHTML = '';
       play(song);
     } catch (e) {
       showToast('Couldn’t load song');
     }
   }
 
-  /* ---------- WIRE UI ---------- */
+  /* WIRE UI */
   document.querySelectorAll('.chip').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1677,34 +1653,26 @@
     const btn = $('btn-like');
     btn.classList.toggle('liked', state.likes.has(s.id));
     btn.setAttribute('aria-pressed', state.likes.has(s.id) ? 'true' : 'false');
-    // Re-trigger animation by removing and re-adding 'liked' on toggle on
     if (!wasLiked) {
       btn.classList.remove('liked'); void btn.offsetWidth; btn.classList.add('liked');
     }
     nextPickCache = null;
     setTimeout(() => prefetchNext(), 100);
   });
-  $('btn-lyrics').addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (state.lyricsOpen) closeLyrics();
-    else openLyrics();
-  });
-  $('btn-lyrics-close').addEventListener('click', closeLyrics);
-  $('btn-search').addEventListener('click', (e) => { e.stopPropagation(); openSearch(); });
-  $('btn-search-close').addEventListener('click', closeSearch);
+  $('btn-lyrics').addEventListener('click', (e) => { e.stopPropagation(); toggleLyrics(); });
+  $('btn-search').addEventListener('click', (e) => { e.stopPropagation(); toggleSearch(); });
+  $('btn-flip-back').addEventListener('click', (e) => { e.stopPropagation(); flipToFront(); });
+  $('btn-flip-back-2').addEventListener('click', (e) => { e.stopPropagation(); flipToFront(); });
   $('btn-theme').addEventListener('click', (e) => {
     e.stopPropagation();
     state.theme = state.theme === 'dark' ? 'light' : 'dark';
     applyTheme(state.theme);
   });
-
-  // Tap on cover toggles play/pause (Reels-style)
-  $('cover-wrap').addEventListener('click', (e) => {
+  $('cover').addEventListener('click', (e) => {
     e.stopPropagation();
-    togglePlay();
+    if (state.cardMode === 'front') togglePlay();
   });
 
-  // Search input
   $('search-input').addEventListener('input', (e) => {
     const q = e.target.value.trim();
     clearTimeout(searchTimer);
@@ -1716,7 +1684,6 @@
     playSearchedSong(btn.dataset.id);
   });
 
-  // Progress
   $('progress').addEventListener('click', (ev) => {
     ev.stopPropagation();
     const rect = ev.currentTarget.getBoundingClientRect();
@@ -1724,20 +1691,12 @@
     if (audio.duration) audio.currentTime = pct * audio.duration;
   });
 
-  // Keyboard
   window.addEventListener('keydown', (e) => {
     if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
-      if (e.key === 'Escape') {
-        closeSearch();
-        document.activeElement.blur();
-      }
+      if (e.key === 'Escape') { flipToFront(); document.activeElement.blur(); }
       return;
     }
-    if (e.key === 'Escape') {
-      if (state.lyricsOpen) closeLyrics();
-      else closeSearch();
-      return;
-    }
+    if (e.key === 'Escape') { flipToFront(); return; }
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
     else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') nextRandom();
     else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') prev();
@@ -1745,16 +1704,14 @@
     else if (e.key.toLowerCase() === 'l') $('btn-like').click();
     else if (e.key.toLowerCase() === 'm') $('btn-mystery').click();
     else if (e.key.toLowerCase() === 't') $('btn-theme').click();
-    else if (e.key === '/') { e.preventDefault(); openSearch(); }
-    else if (e.key.toLowerCase() === 'y') $('btn-lyrics').click();
+    else if (e.key.toLowerCase() === 'y') toggleLyrics();
+    else if (e.key === '/') { e.preventDefault(); toggleSearch(); }
   });
 
-  /* ---------- BOOT ---------- */
+  /* BOOT */
   applyTheme(state.theme);
   wireMediaSession();
   wireSwipe();
-
-  // Briefly show the swipe hint to teach the gesture
   setTimeout(() => {
     $('swipe-hint').classList.add('show');
     setTimeout(() => $('swipe-hint').classList.remove('show'), 3500);
