@@ -255,6 +255,18 @@ NON_FILM_TERMS = {
     'remix dj', 'cover song', 'unplugged', 'reprise',
 }
 
+# Compilation-album keywords. Movies have one specific name (e.g. "Pushpa"),
+# but compilation albums repeat with names like "Hits Collection 2026" and
+# carry old songs under a misleading recent year. We exclude these so the
+# Latest era stays actually fresh.
+COMPILATION_RE = re.compile(
+    r'\b(collection|best of|hits of|songs of|compilation|jukebox|patriotic|'
+    r'all time|chartbusters|top hits|favorites|romantic hits|dance hits|'
+    r'super hits|melody hits|throwback|evergreen|special hit|popular hit|'
+    r'golden hit|year wise|decade)\b',
+    re.IGNORECASE,
+)
+
 
 def is_film_song(d: dict) -> bool:
     """Return True if the song appears to be from a Telugu film soundtrack.
@@ -277,6 +289,10 @@ def is_film_song(d: dict) -> bool:
         return False
     # Singles / EPs without movie context
     if album_lc.endswith(' - single') or album_lc.endswith(' - ep'):
+        return False
+    # Compilation albums — these mistag old songs under a recent year
+    # (e.g. "Tollywood Patriotic Songs 2026" containing songs from 2003).
+    if COMPILATION_RE.search(album_lc):
         return False
 
     # Positive signals — need at least one
