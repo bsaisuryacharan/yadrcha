@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-<meta name="theme-color" content="#141218" media="(prefers-color-scheme: dark)" />
+<meta name="theme-color" content="#14111c" media="(prefers-color-scheme: dark)" />
 <meta name="theme-color" content="#fffbff" media="(prefers-color-scheme: light)" />
 <title>Yadrcha · Random Telugu Music</title>
 
@@ -12,135 +12,95 @@
 <link rel="preconnect" href="https://aac.saavncdn.com" />
 <link rel="preconnect" href="https://c.saavncdn.com" />
 <link rel="preconnect" href="https://lrclib.net" />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Serif+Display:ital@0;1&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" rel="stylesheet" />
+<link rel="preconnect" href="https://yadrcha-ai.bcharan197.workers.dev" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Serif+Display:ital@0;1&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0..200&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/crypto-js.min.js" defer></script>
 
 <style>
   /* ============================================================
-     YADRCHA — Material 3 inspired Telugu music player
-     - Light + dark themes via [data-theme] attribute
-     - Material Symbols icons
-     - Card-based layout with elevated surfaces
-     - Dedicated lyrics card (rectangular, scrollable, large type)
+     YADRCHA — Material 3 Telugu music player
+     Compact horizontal hero · search · big lyrics · light/dark
      ============================================================ */
-
   :root {
-    /* Color tokens — DARK theme defaults */
-    --md-surface:        #14111c;
-    --md-surface-1:      #1c1825;
-    --md-surface-2:      #221d2c;
-    --md-surface-3:      #2a2434;
-    --md-surface-4:      #322b3c;
-    --md-on-surface:     #ece6f0;
+    --md-surface: #14111c;
+    --md-surface-1: #1c1825;
+    --md-surface-2: #221d2c;
+    --md-surface-3: #2a2434;
+    --md-surface-4: #322b3c;
+    --md-on-surface: #ece6f0;
     --md-on-surface-var: #b6afc3;
     --md-on-surface-dim: #847c93;
-    --md-outline:        #4a4453;
-    --md-outline-var:    #2e2937;
-
-    --md-primary:        #d0bcff;
-    --md-on-primary:     #381e72;
-    --md-primary-c:      #4f378b;
-    --md-on-primary-c:   #eaddff;
-
-    --md-secondary:      #ccc2dc;
-    --md-on-secondary:   #332d41;
-    --md-secondary-c:    #4a4458;
+    --md-outline: #4a4453;
+    --md-outline-var: #2e2937;
+    --md-primary: #d0bcff;
+    --md-on-primary: #381e72;
+    --md-primary-c: #4f378b;
+    --md-on-primary-c: #eaddff;
+    --md-secondary: #ccc2dc;
+    --md-secondary-c: #4a4458;
     --md-on-secondary-c: #e8def8;
+    --md-tertiary: #efb8c8;
+    --md-tertiary-c: #633b48;
+    --md-on-tertiary-c: #ffd8e4;
 
-    --md-tertiary:       #efb8c8;
-    --md-on-tertiary:    #492532;
-    --md-tertiary-c:     #633b48;
-    --md-on-tertiary-c:  #ffd8e4;
+    --shadow-1: 0 1px 2px rgba(0,0,0,.30), 0 1px 3px 1px rgba(0,0,0,.15);
+    --shadow-2: 0 1px 2px rgba(0,0,0,.30), 0 2px 6px 2px rgba(0,0,0,.15);
+    --shadow-3: 0 1px 3px rgba(0,0,0,.30), 0 4px 8px 3px rgba(0,0,0,.15);
 
-    --md-error:          #f2b8b5;
-    --md-on-error:       #601410;
+    --t-fast: 150ms cubic-bezier(.2,0,0,1);
+    --t-med: 280ms cubic-bezier(.2,0,0,1);
+    --t-slow: 450ms cubic-bezier(.2,0,0,1);
 
-    --shadow-1: 0 1px 2px rgba(0,0,0,0.30), 0 1px 3px 1px rgba(0,0,0,0.15);
-    --shadow-2: 0 1px 2px rgba(0,0,0,0.30), 0 2px 6px 2px rgba(0,0,0,0.15);
-    --shadow-3: 0 1px 3px rgba(0,0,0,0.30), 0 4px 8px 3px rgba(0,0,0,0.15);
-
-    --t-fast: 150ms cubic-bezier(0.2, 0, 0, 1);
-    --t-med:  280ms cubic-bezier(0.2, 0, 0, 1);
-    --t-slow: 450ms cubic-bezier(0.2, 0, 0, 1);
-
-    --r-xs: 4px;  --r-sm: 8px;  --r-md: 12px;
-    --r-lg: 16px; --r-xl: 24px; --r-full: 999px;
-
+    --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 24px; --r-full: 999px;
     color-scheme: dark;
   }
-
   [data-theme="light"] {
-    --md-surface:        #fffbff;
-    --md-surface-1:      #f7f1fa;
-    --md-surface-2:      #f1ebf4;
-    --md-surface-3:      #ebe4ee;
-    --md-surface-4:      #e6dde9;
-    --md-on-surface:     #1d1a22;
+    --md-surface: #fffbff;
+    --md-surface-1: #f7f1fa;
+    --md-surface-2: #f1ebf4;
+    --md-surface-3: #ebe4ee;
+    --md-surface-4: #e6dde9;
+    --md-on-surface: #1d1a22;
     --md-on-surface-var: #49454f;
     --md-on-surface-dim: #79747e;
-    --md-outline:        #79747e;
-    --md-outline-var:    #cac4d0;
-
-    --md-primary:        #6750a4;
-    --md-on-primary:     #ffffff;
-    --md-primary-c:      #eaddff;
-    --md-on-primary-c:   #21005d;
-
-    --md-secondary:      #625b71;
-    --md-on-secondary:   #ffffff;
-    --md-secondary-c:    #e8def8;
+    --md-outline: #79747e;
+    --md-outline-var: #cac4d0;
+    --md-primary: #6750a4;
+    --md-on-primary: #fff;
+    --md-primary-c: #eaddff;
+    --md-on-primary-c: #21005d;
+    --md-secondary: #625b71;
+    --md-secondary-c: #e8def8;
     --md-on-secondary-c: #1d192b;
-
-    --md-tertiary:       #7d5260;
-    --md-on-tertiary:    #ffffff;
-    --md-tertiary-c:     #ffd8e4;
-    --md-on-tertiary-c:  #31111d;
-
-    --md-error:          #b3261e;
-    --md-on-error:       #ffffff;
-
-    --shadow-1: 0 1px 2px rgba(0,0,0,0.10), 0 1px 3px 1px rgba(0,0,0,0.05);
-    --shadow-2: 0 1px 2px rgba(0,0,0,0.10), 0 2px 6px 2px rgba(0,0,0,0.06);
-    --shadow-3: 0 1px 3px rgba(0,0,0,0.10), 0 4px 8px 3px rgba(0,0,0,0.06);
-
+    --md-tertiary: #7d5260;
+    --md-tertiary-c: #ffd8e4;
+    --md-on-tertiary-c: #31111d;
+    --shadow-1: 0 1px 2px rgba(0,0,0,.10), 0 1px 3px 1px rgba(0,0,0,.05);
+    --shadow-2: 0 1px 2px rgba(0,0,0,.10), 0 2px 6px 2px rgba(0,0,0,.06);
+    --shadow-3: 0 1px 3px rgba(0,0,0,.10), 0 4px 8px 3px rgba(0,0,0,.06);
     color-scheme: light;
   }
 
-  /* ============== RESET + BASE ============== */
   *, *::before, *::after { box-sizing: border-box; }
-  html, body {
-    margin: 0; padding: 0;
-    overflow: hidden;
-    overscroll-behavior: none;
-  }
+  html, body { margin: 0; padding: 0; overflow: hidden; overscroll-behavior: none; }
   body {
     font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     color: var(--md-on-surface);
     background: var(--md-surface);
     -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
-    height: 100dvh;
-    width: 100vw;
-    position: fixed;
-    inset: 0;
+    height: 100dvh; width: 100vw;
+    position: fixed; inset: 0;
     transition: background var(--t-med), color var(--t-med);
   }
-  button { font: inherit; color: inherit; cursor: pointer; }
+  button, input { font: inherit; color: inherit; }
   ::selection { background: var(--md-primary-c); color: var(--md-on-primary-c); }
 
   .material-symbols-outlined {
     font-family: 'Material Symbols Outlined';
-    font-weight: normal;
-    font-style: normal;
-    font-size: 24px;
-    line-height: 1;
-    letter-spacing: normal;
-    text-transform: none;
-    display: inline-block;
-    white-space: nowrap;
-    word-wrap: normal;
-    direction: ltr;
+    font-weight: normal; font-style: normal;
+    font-size: 24px; line-height: 1;
+    display: inline-block; white-space: nowrap;
     -webkit-font-feature-settings: 'liga';
-    -webkit-font-smoothing: antialiased;
   }
 
   /* ============== AMBIENT BG ============== */
@@ -149,95 +109,143 @@
     background:
       radial-gradient(50% 40% at 25% 20%, color-mix(in srgb, var(--md-primary-c) 18%, transparent), transparent 70%),
       radial-gradient(50% 40% at 75% 30%, color-mix(in srgb, var(--md-tertiary-c) 14%, transparent), transparent 70%),
-      radial-gradient(60% 50% at 50% 110%, color-mix(in srgb, var(--md-secondary-c) 12%, transparent), transparent 70%),
       var(--md-surface);
     transition: background var(--t-med);
   }
 
-  /* ============== APP LAYOUT ============== */
-  .app {
-    height: 100dvh;
-    width: 100vw;
-    display: grid;
-    place-items: center;
-    overflow: hidden;
-    padding: 0;
-  }
+  /* ============== APP SHELL ============== */
+  .app { height: 100dvh; width: 100vw; display: grid; place-items: center; overflow: hidden; }
   .surface {
-    width: 100%;
-    max-width: 460px;
+    width: 100%; max-width: 460px;
     height: min(100dvh, 880px);
     background: var(--md-surface-1);
     border-radius: 28px;
     border: 1px solid var(--md-outline-var);
     box-shadow: var(--shadow-3);
     overflow: hidden;
-    display: flex;
-    flex-direction: column;
+    display: flex; flex-direction: column;
     position: relative;
-    transition: background var(--t-med), border-color var(--t-med);
+    transition: background var(--t-med);
   }
   @media (max-width: 640px) {
-    .app { padding: 0; }
     .surface {
-      max-width: none;
-      height: 100dvh;
-      border-radius: 0;
-      border: none;
-      box-shadow: none;
+      max-width: none; height: 100dvh;
+      border-radius: 0; border: none; box-shadow: none;
     }
   }
 
-  .scroll-area {
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding: 16px 16px 100px;   /* bottom space for FAB */
-    scrollbar-width: thin;
-    scrollbar-color: var(--md-outline) transparent;
-    scroll-behavior: smooth;
-  }
-  .scroll-area::-webkit-scrollbar { width: 6px; }
-  .scroll-area::-webkit-scrollbar-track { background: transparent; }
-  .scroll-area::-webkit-scrollbar-thumb { background: var(--md-outline); border-radius: 3px; }
-
-  /* ============== TOP APP BAR ============== */
+  /* ============== TOP BAR (search + toggles) ============== */
   .top-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 14px 16px 4px;
+    display: flex; align-items: center; gap: 8px;
+    padding: 12px;
+    padding-top: max(12px, env(safe-area-inset-top, 12px));
     flex-shrink: 0;
-    min-height: 56px;
-    padding-top: max(14px, env(safe-area-inset-top, 14px));
+    border-bottom: 1px solid var(--md-outline-var);
+    position: relative;
+    z-index: 30;
   }
-  .brand {
-    display: flex; align-items: center; gap: 10px;
+  .search-wrap {
+    flex: 1; min-width: 0;
+    position: relative;
+    display: flex; align-items: center;
+    background: var(--md-surface-3);
+    border-radius: var(--r-full);
+    padding: 0 12px;
+    height: 40px;
+    transition: background var(--t-fast);
+  }
+  .search-wrap:focus-within {
+    background: var(--md-surface-4);
+    box-shadow: 0 0 0 2px var(--md-primary);
+  }
+  .search-wrap .material-symbols-outlined {
+    font-size: 20px;
+    color: var(--md-on-surface-var);
+    flex-shrink: 0;
+  }
+  .search-wrap input {
+    flex: 1; min-width: 0;
+    appearance: none; border: none; outline: none;
+    background: transparent;
+    color: var(--md-on-surface);
+    font-size: 14px;
+    padding: 0 8px;
+    height: 100%;
+  }
+  .search-wrap input::placeholder { color: var(--md-on-surface-dim); }
+  .search-clear {
+    appearance: none; border: none; background: transparent;
+    color: var(--md-on-surface-var);
+    width: 24px; height: 24px;
+    display: grid; place-items: center;
+    border-radius: 50%;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .search-clear:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); }
+  .search-clear[hidden] { display: none; }
+
+  /* search results dropdown */
+  .search-results {
+    position: absolute;
+    top: 100%; left: 12px; right: 12px;
+    margin-top: 4px;
+    background: var(--md-surface-2);
+    border: 1px solid var(--md-outline-var);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-3);
+    max-height: 380px;
+    overflow-y: auto;
+    z-index: 40;
+    display: none;
+  }
+  .search-results.show { display: block; }
+  .search-results::-webkit-scrollbar { width: 6px; }
+  .search-results::-webkit-scrollbar-thumb { background: var(--md-outline); border-radius: 3px; }
+  .search-result {
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    gap: 12px;
+    align-items: center;
+    padding: 8px 12px;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: var(--md-on-surface);
+    width: 100%;
+    text-align: left;
+    transition: background var(--t-fast);
     min-width: 0;
   }
-  .brand-logo {
-    width: 32px; height: 32px;
-    display: grid; place-items: center;
-    border-radius: 8px;
-    background: linear-gradient(135deg, var(--md-primary), var(--md-tertiary));
-    color: var(--md-on-primary);
+  .search-result:hover { background: color-mix(in srgb, var(--md-on-surface) 6%, transparent); }
+  .search-result-cover {
+    width: 40px; height: 40px;
+    border-radius: 6px;
+    background: var(--md-surface-3);
+    background-size: cover;
+    background-position: center;
+    flex-shrink: 0;
   }
-  .brand-logo .material-symbols-outlined {
-    font-size: 20px;
-    font-variation-settings: 'FILL' 1;
-  }
-  .brand-name {
-    font-size: 16px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
+  .search-result-info { min-width: 0; }
+  .search-result-title {
+    font-size: 13px;
+    font-weight: 500;
     color: var(--md-on-surface);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .search-result-sub {
+    font-size: 11px;
+    color: var(--md-on-surface-var);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .search-empty, .search-loading {
+    padding: 16px;
+    text-align: center;
+    color: var(--md-on-surface-var);
+    font-size: 12px;
   }
 
-  .top-actions {
-    display: flex; align-items: center; gap: 4px;
-  }
-
-  /* ============== ICON BUTTON (Material) ============== */
+  /* Material icon button */
   .icon-btn {
     appearance: none; border: none; background: transparent;
     width: 40px; height: 40px;
@@ -245,10 +253,10 @@
     display: grid; place-items: center;
     color: var(--md-on-surface-var);
     cursor: pointer;
-    position: relative;
+    flex-shrink: 0;
     transition: background var(--t-fast), color var(--t-fast);
   }
-  .icon-btn:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); }
+  .icon-btn:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); color: var(--md-on-surface); }
   .icon-btn:active { background: color-mix(in srgb, var(--md-on-surface) 12%, transparent); }
   .icon-btn:focus-visible { outline: 2px solid var(--md-primary); outline-offset: 2px; }
   .icon-btn .material-symbols-outlined { font-size: 22px; }
@@ -256,120 +264,61 @@
     background: var(--md-primary-c);
     color: var(--md-on-primary-c);
   }
-  .icon-btn.toggle.on:hover {
-    background: color-mix(in srgb, var(--md-primary-c) 88%, var(--md-on-primary));
-  }
 
-  /* ============== MOOD PILL ============== */
-  .mood {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 6px 14px;
-    border-radius: var(--r-full);
-    background: var(--md-surface-2);
-    border: 1px solid var(--md-outline-var);
-    color: var(--md-on-surface-var);
-    font-size: 11px;
-    font-weight: 500;
-    letter-spacing: 0.6px;
-    text-transform: uppercase;
-    margin: 8px auto 4px;
-    width: fit-content;
-  }
-  .mood .dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: var(--md-primary);
-    box-shadow: 0 0 8px var(--md-primary);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .mood .dot { animation: pulse 2s infinite; }
-  }
-  @keyframes pulse {
-    0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.4); opacity: 0.55; }
-  }
-  .mood-row { text-align: center; }
-
-  /* ============== ALBUM ART CARD ============== */
-  .art-card {
-    background: var(--md-surface-2);
-    border-radius: var(--r-xl);
-    padding: 24px 20px 20px;
-    margin: 16px 0;
-    text-align: center;
-    transition: background var(--t-med);
+  /* ============== HERO ROW (compact) ============== */
+  .hero {
+    display: grid;
+    grid-template-columns: 88px 1fr;
+    gap: 14px;
+    align-items: center;
+    padding: 14px 16px;
+    flex-shrink: 0;
     user-select: none;
     touch-action: pan-y;
   }
-  .art-frame {
-    width: 180px;
-    height: 180px;
-    margin: 0 auto 18px;
-    border-radius: var(--r-lg);
+  .hero-art {
+    width: 88px; height: 88px;
+    border-radius: var(--r-md);
     overflow: hidden;
-    background: var(--md-surface-3);
     box-shadow: var(--shadow-2);
-    position: relative;
-    transition: transform var(--t-med);
-  }
-  .art-frame.spin-burst {
-    animation: artSpinBurst 0.7s cubic-bezier(.5,.05,.5,.95) 1;
-  }
-  @keyframes artSpinBurst {
-    0%   { transform: scale(1) rotate(0); }
-    50%  { transform: scale(0.92) rotate(8deg); }
-    100% { transform: scale(1) rotate(0); }
-  }
-  .art-img {
-    position: absolute; inset: 0;
+    background: var(--md-surface-3);
     background-size: cover;
     background-position: center;
-    background-color: var(--md-surface-3);
-    transition: opacity var(--t-slow);
+    transition: transform var(--t-med);
+    flex-shrink: 0;
   }
-  /* subtle pulse ring while playing */
-  .art-frame::after {
-    content: "";
-    position: absolute; inset: 0;
-    border-radius: inherit;
-    border: 2px solid transparent;
-    pointer-events: none;
-    transition: border-color var(--t-med);
+  .surface.playing .hero-art {
+    box-shadow: var(--shadow-2), 0 0 0 2px color-mix(in srgb, var(--md-primary) 30%, transparent);
   }
-  .playing .art-frame::after {
-    border-color: color-mix(in srgb, var(--md-primary) 40%, transparent);
+  .hero-art.spin-burst { animation: spinBurst 0.7s cubic-bezier(.5,.05,.5,.95) 1; }
+  @keyframes spinBurst {
+    0% { transform: scale(1) rotate(0); }
+    50% { transform: scale(0.92) rotate(8deg); }
+    100% { transform: scale(1) rotate(0); }
   }
-  @media (prefers-reduced-motion: no-preference) {
-    .playing .art-frame::after {
-      animation: artGlow 2.4s ease-in-out infinite;
-    }
-  }
-  @keyframes artGlow {
-    0%, 100% { box-shadow: 0 0 0 0 transparent; }
-    50%      { box-shadow: 0 0 0 6px color-mix(in srgb, var(--md-primary) 18%, transparent); }
-  }
-
-  .meta-block {
+  .hero-meta {
     min-width: 0;
-    transition: opacity var(--t-med);
+    transition: filter var(--t-med), opacity var(--t-med);
+  }
+  .hero-meta.revealing {
+    filter: blur(8px);
+    opacity: 0.2;
   }
   .meta-movie {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
-    letter-spacing: 1.5px;
+    letter-spacing: 1.4px;
     text-transform: uppercase;
     color: var(--md-tertiary);
-    margin-bottom: 6px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    margin-bottom: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .meta-title {
     font-family: "DM Serif Display";
     font-style: italic;
-    font-size: 24px;
-    line-height: 1.2;
-    margin: 0 0 6px;
+    font-size: 20px;
+    line-height: 1.15;
+    margin: 0 0 2px;
     color: var(--md-on-surface);
     word-break: break-word;
     display: -webkit-box;
@@ -378,22 +327,15 @@
     overflow: hidden;
   }
   .meta-artist {
-    font-size: 13px;
+    font-size: 12px;
     color: var(--md-on-surface-var);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .meta-block.revealing .meta-movie,
-  .meta-block.revealing .meta-title,
-  .meta-block.revealing .meta-artist {
-    filter: blur(8px);
-    opacity: 0.2;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
 
-  /* ============== PROGRESS SLIDER ============== */
-  .progress-row {
-    margin: 16px 4px 12px;
+  /* ============== PLAYER ROW ============== */
+  .player-row {
+    padding: 0 16px 10px;
+    flex-shrink: 0;
   }
   .progress {
     position: relative;
@@ -401,6 +343,7 @@
     background: var(--md-surface-3);
     border-radius: var(--r-full);
     cursor: pointer;
+    margin-bottom: 8px;
     transition: height var(--t-fast);
   }
   .progress:hover { height: 6px; }
@@ -419,8 +362,8 @@
     border-radius: 50%;
     transform: translate(-50%, -50%) scale(0);
     transition: transform var(--t-fast);
-    pointer-events: none;
     box-shadow: 0 0 0 4px color-mix(in srgb, var(--md-primary) 18%, transparent);
+    pointer-events: none;
   }
   .progress:hover .thumb,
   .progress:focus-within .thumb { transform: translate(-50%, -50%) scale(1); }
@@ -428,84 +371,95 @@
   .times {
     display: flex; justify-content: space-between;
     font-variant-numeric: tabular-nums;
-    font-size: 11px;
+    font-size: 10px;
     color: var(--md-on-surface-var);
-    margin-top: 6px;
     letter-spacing: 0.3px;
+    margin-bottom: 8px;
   }
 
-  /* ============== CONTROLS ============== */
+  /* Controls + shuffle inline */
   .controls {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr)) 1.6fr;
     gap: 4px;
     align-items: center;
-    margin-bottom: 16px;
     min-width: 0;
   }
   .ctrl {
     appearance: none; border: none; background: transparent;
     width: 100%;
-    height: 48px;
+    height: 44px;
     border-radius: var(--r-md);
     display: grid; place-items: center;
     color: var(--md-on-surface-var);
+    cursor: pointer;
     transition: background var(--t-fast), color var(--t-fast), transform var(--t-fast);
   }
-  .ctrl .material-symbols-outlined { font-size: 24px; }
   .ctrl:hover { background: color-mix(in srgb, var(--md-on-surface) 8%, transparent); color: var(--md-on-surface); }
   .ctrl:active { transform: scale(0.92); }
-  .ctrl:focus-visible { outline: 2px solid var(--md-primary); outline-offset: 2px; }
-  .ctrl.liked {
-    color: var(--md-tertiary);
-  }
+  .ctrl .material-symbols-outlined { font-size: 22px; }
+  .ctrl.liked { color: var(--md-tertiary); }
   .ctrl.liked .material-symbols-outlined { font-variation-settings: 'FILL' 1; }
   .ctrl.play {
-    height: 56px;
     background: var(--md-primary);
     color: var(--md-on-primary);
-    border-radius: var(--r-lg);
     box-shadow: var(--shadow-1);
   }
   .ctrl.play .material-symbols-outlined {
-    font-size: 30px;
+    font-size: 26px;
     font-variation-settings: 'FILL' 1;
   }
-  .ctrl.play:hover { background: color-mix(in srgb, var(--md-primary) 90%, var(--md-on-primary)); transform: scale(1.02); }
-  .ctrl.play:active { transform: scale(0.96); }
+  .ctrl.play:hover { background: color-mix(in srgb, var(--md-primary) 88%, var(--md-on-primary)); transform: scale(1.04); }
 
-  .heart-burst {
-    position: absolute;
-    pointer-events: none;
-    color: var(--md-tertiary);
-    font-size: 14px;
-    animation: heartFly 1s ease-out forwards;
-    z-index: 50;
+  .shuffle-btn {
+    appearance: none; border: none;
+    background: var(--md-secondary-c);
+    color: var(--md-on-secondary-c);
+    height: 44px;
+    border-radius: var(--r-md);
+    padding: 0 14px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    font-family: "Inter";
+    font-size: 13px; font-weight: 600;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+    transition: background var(--t-fast), transform var(--t-fast);
+    min-width: 0;
   }
-  @keyframes heartFly {
-    0%   { transform: translate(0, 0) scale(.4); opacity: 0; }
-    20%  { opacity: 1; }
-    100% { transform: translate(var(--dx, 20px), -80px) scale(1.2); opacity: 0; }
+  .shuffle-btn:hover { background: color-mix(in srgb, var(--md-secondary-c) 88%, var(--md-on-secondary-c)); }
+  .shuffle-btn:active { transform: scale(0.96); }
+  .shuffle-btn:disabled { opacity: 0.5; cursor: wait; }
+  .shuffle-btn .material-symbols-outlined { font-size: 18px; }
+  .shuffle-btn.spin .material-symbols-outlined {
+    animation: shuffleSpin 0.7s cubic-bezier(.5,.05,.5,.95) 1;
+  }
+  @keyframes shuffleSpin {
+    0% { transform: rotate(0); }
+    100% { transform: rotate(360deg); }
   }
 
-  /* ============== LYRICS CARD ============== */
+  /* ============== LYRICS CARD (BIG — main visual) ============== */
+  .lyrics-area {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 0 16px 12px;
+    overflow: hidden;
+  }
   .lyrics-card {
+    flex: 1;
+    min-height: 0;
     background: var(--md-surface-2);
     border-radius: var(--r-xl);
-    padding: 20px 16px;
-    margin-bottom: 16px;
-    height: 220px;
-    overflow: hidden;
+    padding: 18px 14px;
     position: relative;
+    overflow: hidden;
     transition: background var(--t-med);
   }
   .lyrics-card::before, .lyrics-card::after {
-    content: "";
-    position: absolute;
-    left: 0; right: 0;
-    height: 36px;
-    pointer-events: none;
-    z-index: 2;
+    content: ""; position: absolute; left: 0; right: 0;
+    height: 40px; pointer-events: none; z-index: 2;
   }
   .lyrics-card::before {
     top: 0;
@@ -516,18 +470,16 @@
     background: linear-gradient(0deg, var(--md-surface-2) 0%, transparent 100%);
   }
   .lyrics-track {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+    display: flex; flex-direction: column; align-items: center;
     will-change: transform;
     transition: transform 420ms cubic-bezier(.4,0,.2,1);
-    padding: 90px 0;   /* center the active line */
+    padding: 50% 0;
   }
   .lyrics-line {
     font-family: "DM Serif Display";
     font-style: italic;
     font-size: 14px;
-    line-height: 1.45;
+    line-height: 1.5;
     margin: 6px 0;
     text-align: center;
     color: var(--md-on-surface-dim);
@@ -535,15 +487,15 @@
     max-width: 100%;
     word-wrap: break-word;
     padding: 0 8px;
-    opacity: 0.6;
+    opacity: 0.55;
   }
   .lyrics-line.active {
     color: var(--md-on-surface);
     font-size: 22px;
     font-weight: 600;
     opacity: 1;
-    text-shadow: 0 0 24px color-mix(in srgb, var(--md-primary) 40%, transparent);
-    transform: scale(1.02);
+    text-shadow: 0 0 24px color-mix(in srgb, var(--md-primary) 50%, transparent);
+    transform: scale(1.03);
   }
   .lyrics-line.near {
     color: var(--md-on-surface-var);
@@ -551,52 +503,73 @@
     opacity: 0.85;
   }
   .lyrics-state {
-    position: absolute;
-    inset: 0;
-    display: grid;
-    place-items: center;
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
     text-align: center;
-    padding: 0 24px;
+    padding: 20px 24px;
+    pointer-events: none;
   }
   .lyrics-state.hidden { display: none; }
-  .lyrics-state .icon {
-    font-size: 32px;
+  .lyrics-state .material-symbols-outlined {
+    font-size: 30px;
     color: var(--md-on-surface-dim);
-    margin-bottom: 6px;
-  }
-  .lyrics-state .icon.material-symbols-outlined {
-    font-variation-settings: 'FILL' 0;
+    margin-bottom: 8px;
   }
   .lyrics-state .label {
-    font-size: 12px;
+    font-size: 11px;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
     color: var(--md-on-surface-var);
-    letter-spacing: 0.4px;
-    margin-bottom: 2px;
+    margin-bottom: 4px;
   }
   .lyrics-state .sub {
     font-family: "DM Serif Display";
     font-style: italic;
-    font-size: 18px;
+    font-size: 16px;
     color: var(--md-on-surface);
   }
+  /* skeleton dots while loading */
+  .lyrics-skeleton {
+    display: flex; gap: 6px; justify-content: center;
+    margin-top: 10px;
+  }
+  .lyrics-skeleton span {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--md-on-surface-dim);
+    opacity: 0.4;
+    animation: dotPulse 1.2s infinite ease-in-out;
+  }
+  .lyrics-skeleton span:nth-child(2) { animation-delay: 0.15s; }
+  .lyrics-skeleton span:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes dotPulse {
+    0%, 100% { opacity: 0.3; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.3); }
+  }
+  /* "translated" badge */
+  .lyrics-badge {
+    position: absolute;
+    top: 8px; right: 10px;
+    z-index: 3;
+    font-size: 9px;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: var(--md-on-tertiary-c);
+    background: var(--md-tertiary-c);
+    padding: 3px 8px;
+    border-radius: var(--r-full);
+    font-weight: 600;
+    opacity: 0;
+    transition: opacity var(--t-med);
+  }
+  .lyrics-badge.show { opacity: 1; }
 
   /* ============== ERA CHIPS ============== */
-  .dial-row { margin-bottom: 12px; }
-  .dial-label {
-    display: block;
-    font-size: 10px;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    color: var(--md-on-surface-dim);
-    text-align: center;
-    margin-bottom: 8px;
-  }
-  .dial {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+  .era-row {
+    display: flex; flex-wrap: wrap; gap: 6px;
     justify-content: center;
-    min-width: 0;
+    padding: 0 16px 12px;
+    flex-shrink: 0;
   }
   .chip {
     appearance: none;
@@ -604,15 +577,14 @@
     background: transparent;
     color: var(--md-on-surface-var);
     border-radius: var(--r-sm);
-    padding: 8px 14px;
-    font-size: 13px;
+    padding: 7px 12px;
+    font-size: 12px;
     font-weight: 500;
     letter-spacing: 0.2px;
     cursor: pointer;
     transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast), transform var(--t-fast);
-    min-height: 32px;
+    min-height: 30px;
     white-space: nowrap;
-    flex-grow: 0;
   }
   .chip:hover { background: color-mix(in srgb, var(--md-on-surface) 5%, transparent); color: var(--md-on-surface); }
   .chip:active { transform: scale(0.96); }
@@ -623,51 +595,24 @@
     font-weight: 600;
   }
 
-  /* ============== SHUFFLE FAB (extended) ============== */
-  .fab {
+  /* heart bursts */
+  .heart-burst {
     position: absolute;
-    right: 16px;
-    bottom: 16px;
-    bottom: max(16px, env(safe-area-inset-bottom, 16px));
-    appearance: none; border: none;
-    background: var(--md-primary);
-    color: var(--md-on-primary);
-    height: 56px;
-    padding: 0 24px;
-    border-radius: var(--r-lg);
-    font-family: "Inter";
-    font-size: 14px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    display: inline-flex; align-items: center; gap: 12px;
-    box-shadow: var(--shadow-3);
-    cursor: pointer;
-    transition: background var(--t-fast), box-shadow var(--t-fast), transform var(--t-fast);
-    z-index: 20;
+    pointer-events: none;
+    color: var(--md-tertiary);
+    animation: heartFly 1s ease-out forwards;
+    z-index: 50;
   }
-  .fab:hover {
-    background: color-mix(in srgb, var(--md-primary) 88%, var(--md-on-primary));
-    box-shadow: 0 6px 12px rgba(0,0,0,0.20);
-  }
-  .fab:active { transform: scale(0.97); }
-  .fab:disabled {
-    background: var(--md-surface-3);
-    color: var(--md-on-surface-dim);
-    cursor: wait;
-    box-shadow: none;
-  }
-  .fab .material-symbols-outlined { font-size: 22px; }
-  .spin-burst { animation: spinBurst 0.7s cubic-bezier(.5,.05,.5,.95) 1; }
-  @keyframes spinBurst {
-    0%   { transform: rotate(0); }
-    100% { transform: rotate(360deg); }
+  @keyframes heartFly {
+    0% { transform: translate(0,0) scale(.4); opacity: 0; }
+    20% { opacity: 1; }
+    100% { transform: translate(var(--dx, 20px), -80px) scale(1.2); opacity: 0; }
   }
 
-  /* ============== TOAST ============== */
+  /* toast */
   .toast {
     position: absolute;
-    bottom: 90px;
-    left: 50%;
+    bottom: 16px; left: 50%;
     transform: translate(-50%, 130%);
     background: var(--md-surface-4);
     color: var(--md-on-surface);
@@ -675,8 +620,7 @@
     border-radius: var(--r-md);
     padding: 10px 16px;
     font-size: 12px;
-    font-weight: 500;
-    z-index: 30;
+    z-index: 60;
     max-width: calc(100% - 32px);
     text-align: center;
     box-shadow: var(--shadow-2);
@@ -684,12 +628,9 @@
     opacity: 0;
     pointer-events: none;
   }
-  .toast.show {
-    transform: translate(-50%, 0);
-    opacity: 1;
-  }
+  .toast.show { transform: translate(-50%, 0); opacity: 1; }
 
-  /* ============== BOOTING ============== */
+  /* boot */
   .booting {
     position: absolute; inset: 0;
     display: grid; place-items: center;
@@ -698,11 +639,7 @@
     backdrop-filter: blur(20px);
   }
   .booting.hidden { display: none; }
-  .boot-card {
-    text-align: center;
-    padding: 32px;
-    max-width: 320px;
-  }
+  .boot-card { text-align: center; padding: 24px; max-width: 320px; }
   .boot-spinner {
     width: 36px; height: 36px;
     margin: 0 auto 16px;
@@ -712,97 +649,60 @@
     animation: spin 1s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .boot-card h3 {
-    font-family: "DM Serif Display";
-    font-style: italic;
-    font-size: 22px;
-    margin: 0 0 8px;
-    color: var(--md-on-surface);
-  }
-  .boot-card p {
-    font-size: 12px;
-    color: var(--md-on-surface-var);
-    margin: 0;
-  }
+  .boot-card h3 { font-family: "DM Serif Display"; font-style: italic; font-size: 22px; margin: 0 0 8px; }
+  .boot-card p { font-size: 12px; color: var(--md-on-surface-var); margin: 0; }
 
-  /* hidden audio */
   audio { display: none; }
 
-  /* swipe state */
-  .art-card.swiping .art-frame { transition: transform 200ms ease-out; }
-
   @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after {
-      animation-duration: 0.01ms !important;
-      transition-duration: 0.01ms !important;
-    }
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   }
 </style>
 </head>
 <body>
-
 <div class="ambient" id="ambient"></div>
 
 <div class="app">
   <div class="surface" id="surface">
 
-    <!-- TOP APP BAR -->
+    <!-- TOP BAR: search + theme + lyrics-mode -->
     <header class="top-bar">
-      <div class="brand">
-        <div class="brand-logo" aria-hidden="true">
-          <span class="material-symbols-outlined">graphic_eq</span>
-        </div>
-        <span class="brand-name">YADRCHA</span>
+      <div class="search-wrap">
+        <span class="material-symbols-outlined" aria-hidden="true">search</span>
+        <input id="search-input" type="search" autocomplete="off" placeholder="Search songs, movies, artists…" aria-label="Search songs" />
+        <button class="search-clear" id="search-clear" type="button" hidden aria-label="Clear">
+          <span class="material-symbols-outlined" style="font-size:18px">close</span>
+        </button>
+        <div class="search-results" id="search-results" role="listbox"></div>
       </div>
-      <div class="top-actions">
-        <button class="icon-btn" id="btn-theme" type="button" aria-label="Toggle dark/light theme" title="Theme">
-          <span class="material-symbols-outlined" id="btn-theme-icon">dark_mode</span>
-        </button>
-        <button class="icon-btn toggle" id="btn-lyrics-mode" type="button" aria-label="Skip songs without synced lyrics" title="Skip songs without synced lyrics">
-          <span class="material-symbols-outlined">lyrics</span>
-        </button>
-        <button class="icon-btn" id="btn-keys" type="button" aria-label="Keyboard shortcuts" title="Shortcuts">
-          <span class="material-symbols-outlined">keyboard</span>
-        </button>
-      </div>
+      <button class="icon-btn" id="btn-theme" type="button" aria-label="Toggle theme" title="Theme">
+        <span class="material-symbols-outlined" id="btn-theme-icon">dark_mode</span>
+      </button>
+      <button class="icon-btn toggle" id="btn-lyrics-mode" type="button" aria-label="Skip songs without lyrics" title="Skip songs without synced lyrics">
+        <span class="material-symbols-outlined">lyrics</span>
+      </button>
     </header>
 
-    <!-- SCROLLABLE CONTENT -->
-    <div class="scroll-area">
-
-      <div class="mood-row">
-        <div class="mood">
-          <span class="dot" aria-hidden="true"></span>
-          <span id="mood-text">Tuning the dial…</span>
-        </div>
+    <!-- HERO: poster + meta side-by-side -->
+    <div class="hero" id="hero">
+      <div class="hero-art" id="hero-art"></div>
+      <div class="hero-meta" id="meta">
+        <div class="meta-movie" id="meta-movie">— Telugu film —</div>
+        <h1 class="meta-title" id="meta-title">Random Telugu hits</h1>
+        <div class="meta-artist" id="meta-artist">Press shuffle to begin</div>
       </div>
+    </div>
 
-      <!-- ALBUM ART CARD -->
-      <div class="art-card" id="art-card">
-        <div class="art-frame" id="art-frame">
-          <div class="art-img" id="art-img"></div>
-        </div>
-        <div class="meta-block" id="meta">
-          <div class="meta-movie" id="meta-movie">Press shuffle to begin</div>
-          <h1 class="meta-title" id="meta-title">Random Telugu hits</h1>
-          <div class="meta-artist" id="meta-artist">— old to latest —</div>
-        </div>
+    <!-- PROGRESS + INLINE CONTROLS -->
+    <div class="player-row">
+      <div class="progress" id="progress" role="slider" tabindex="0" aria-label="Track position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="filled" id="filled"></div>
+        <div class="thumb" id="thumb"></div>
       </div>
-
-      <!-- PROGRESS -->
-      <div class="progress-row">
-        <div class="progress" id="progress" role="slider" tabindex="0"
-             aria-label="Track position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-          <div class="filled" id="filled"></div>
-          <div class="thumb" id="thumb"></div>
-        </div>
-        <div class="times">
-          <span id="time-cur">0:00</span>
-          <span id="time-tot">0:00</span>
-        </div>
+      <div class="times">
+        <span id="time-cur">0:00</span>
+        <span id="time-tot">0:00</span>
       </div>
-
-      <!-- CONTROLS -->
       <div class="controls">
         <button class="ctrl" id="btn-like" type="button" aria-label="Like" aria-pressed="false">
           <span class="material-symbols-outlined">favorite</span>
@@ -813,45 +713,42 @@
         <button class="ctrl play" id="btn-play" type="button" aria-label="Play / pause">
           <span class="material-symbols-outlined" id="btn-play-icon">play_arrow</span>
         </button>
-        <button class="ctrl" id="btn-next" type="button" aria-label="Next random">
+        <button class="ctrl" id="btn-next" type="button" aria-label="Next">
           <span class="material-symbols-outlined">skip_next</span>
         </button>
-        <button class="ctrl" id="btn-mystery" type="button" aria-label="Mystery reveal" title="Mystery — title hidden until reveal">
+        <button class="ctrl" id="btn-mystery" type="button" aria-label="Mystery" title="Mystery — title hidden until reveal">
           <span class="material-symbols-outlined">help</span>
         </button>
+        <button class="shuffle-btn" id="shuffle-mega" type="button" disabled aria-label="Shuffle">
+          <span class="material-symbols-outlined">shuffle</span>
+          <span id="shuffle-label">Loading…</span>
+        </button>
       </div>
+    </div>
 
-      <!-- LYRICS CARD -->
+    <!-- LYRICS CARD (dominant area) -->
+    <div class="lyrics-area">
       <div class="lyrics-card" id="lyrics-card">
+        <div class="lyrics-badge" id="lyrics-badge">Translated</div>
         <div class="lyrics-track" id="lyrics-track"></div>
         <div class="lyrics-state" id="lyrics-state">
           <div>
-            <div class="icon material-symbols-outlined">music_note</div>
-            <div class="label">Lyrics</div>
+            <span class="material-symbols-outlined" id="lyrics-state-icon">music_note</span>
+            <div class="label" id="lyrics-state-label">Lyrics</div>
             <div class="sub" id="lyrics-state-text">Press shuffle to begin</div>
           </div>
         </div>
       </div>
+    </div>
 
-      <!-- ERA CHIPS -->
-      <div class="dial-row">
-        <span class="dial-label">Era</span>
-        <div class="dial" role="group" aria-label="Era filter">
-          <button class="chip" data-era="all" aria-pressed="true" type="button">All</button>
-          <button class="chip" data-era="vintage" aria-pressed="false" type="button">Vintage</button>
-          <button class="chip" data-era="90s" aria-pressed="false" type="button">90s</button>
-          <button class="chip" data-era="2000s" aria-pressed="false" type="button">2000s</button>
-          <button class="chip" data-era="latest" aria-pressed="false" type="button">Latest</button>
-        </div>
-      </div>
-
-    </div><!-- /scroll-area -->
-
-    <!-- SHUFFLE FAB -->
-    <button class="fab" id="shuffle-mega" type="button" disabled>
-      <span class="material-symbols-outlined" id="shuffle-icon">shuffle</span>
-      <span id="shuffle-label">Loading…</span>
-    </button>
+    <!-- ERA CHIPS -->
+    <div class="era-row" role="group" aria-label="Era filter">
+      <button class="chip" data-era="all" aria-pressed="true" type="button">All</button>
+      <button class="chip" data-era="vintage" aria-pressed="false" type="button">Vintage</button>
+      <button class="chip" data-era="90s" aria-pressed="false" type="button">90s</button>
+      <button class="chip" data-era="2000s" aria-pressed="false" type="button">2000s</button>
+      <button class="chip" data-era="latest" aria-pressed="false" type="button">Latest</button>
+    </div>
 
     <!-- TOAST -->
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -865,27 +762,20 @@
       </div>
     </div>
 
-  </div><!-- /surface -->
-</div><!-- /app -->
+  </div>
+</div>
 
 <audio id="audio" preload="auto" crossorigin="anonymous"></audio>
 
 <script>
-/* ============================================================
-   YADRCHA — Material 3 Telugu music player
-   - JioSaavn CDN audio (full songs)
-   - LRClib synced lyrics (skip-no-lyrics toggle)
-   - Heuristic + Groq AI recommender
-   - Persistent history + likes + theme
-   ============================================================ */
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
 
-  // "Latest" = past 3 years (current and 2 prior)
   const NOW_YEAR = new Date().getFullYear();
   const LATEST_FROM_YEAR = NOW_YEAR - 2;
 
+  const WORKER = 'https://yadrcha-ai.bcharan197.workers.dev';
   const CACHE_KEY = 'yadrcha.catalog.v4';
   const CACHE_TTL = 24 * 60 * 60 * 1000;
   const HISTORY_KEY = 'yadrcha.history.v1';
@@ -893,8 +783,6 @@
   const THEME_KEY = 'yadrcha.theme';
   const SKIP_NO_LYRICS_KEY = 'yadrcha.skipNoLyrics';
 
-  // AI recommender
-  const AI_WORKER_URL = 'https://yadrcha-ai.bcharan197.workers.dev';
   const AI_LIKES_THRESHOLD = 5;
   const AI_TIMEOUT_MS = 800;
   const AI_CANDIDATE_COUNT = 20;
@@ -908,7 +796,6 @@
   function applyTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
     try { localStorage.setItem(THEME_KEY, theme); } catch (_) {}
-    // Button icon shows the action (i.e. icon of the OTHER mode)
     $('btn-theme-icon').textContent = theme === 'dark' ? 'light_mode' : 'dark_mode';
   }
 
@@ -923,7 +810,6 @@
     likes: new Set(JSON.parse(localStorage.getItem('yadrcha.likes') || '[]')),
     theme: detectInitialTheme(),
   };
-
   const lyricsState = {
     lines: null,
     activeIdx: -1,
@@ -932,20 +818,17 @@
     skipMode: JSON.parse(localStorage.getItem(SKIP_NO_LYRICS_KEY) ?? 'true'),
     consecutiveSkips: 0,
     MAX_CONSECUTIVE_SKIPS: 8,
+    isTranslated: false,
   };
 
   function pushHistory(id) {
     state.history.push(id);
     if (state.history.length > HISTORY_MAX) state.history = state.history.slice(-HISTORY_MAX);
-    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(state.history)); }
-    catch (_) {}
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(state.history)); } catch (_) {}
   }
 
   /* ---------- UTILS ---------- */
-  const fmt = (t) => {
-    if (!isFinite(t) || t < 0) t = 0;
-    return Math.floor(t / 60) + ':' + Math.floor(t % 60).toString().padStart(2, '0');
-  };
+  const fmt = (t) => isFinite(t) && t > 0 ? Math.floor(t / 60) + ':' + Math.floor(t % 60).toString().padStart(2, '0') : '0:00';
   function pickEra(year) {
     if (!year) return 'all';
     if (year < 1990) return 'vintage';
@@ -959,16 +842,6 @@
     t.classList.add('show');
     clearTimeout(showToast._t);
     showToast._t = setTimeout(() => t.classList.remove('show'), ms);
-  }
-
-  /* ---------- MOOD ---------- */
-  function moodForNow() {
-    const h = new Date().getHours();
-    if (h >= 5 && h < 11)  return 'Morning ragas · live mix';
-    if (h >= 11 && h < 16) return 'Afternoon hits · live mix';
-    if (h >= 16 && h < 20) return 'Sunset melodies · live mix';
-    if (h >= 20 && h < 24) return 'Evening romance · live mix';
-    return 'Late-night chill · live mix';
   }
 
   /* ---------- CATALOG ---------- */
@@ -1050,7 +923,6 @@
       topEra: eras[0] || 'all',
     };
   }
-
   function sampleCandidates(n) {
     const p = pool();
     if (!p.length) return [];
@@ -1068,7 +940,6 @@
     }
     return out;
   }
-
   function heuristicPick(candidates) {
     const taste = buildTaste();
     if (!taste) return candidates[Math.floor(Math.random() * candidates.length)];
@@ -1081,21 +952,19 @@
       const eraMatch = c.era === taste.topEra ? 1 : 0;
       const yearProx = c.year ? Math.max(0, 1 - Math.abs(c.year - taste.yearCentroid) / 15) : 0;
       const histPenalty = recent.has(c.id) ? 1 : 0;
-      const score = 3.0 * artistMatch + 2.0 * movieMatch + 1.5 * eraMatch
-                  + 1.0 * yearProx - 4.0 * histPenalty + 0.3 * Math.random();
+      const score = 3 * artistMatch + 2 * movieMatch + 1.5 * eraMatch
+                  + 1 * yearProx - 4 * histPenalty + 0.3 * Math.random();
       if (score > bestScore) { bestScore = score; best = c; }
     }
     return best || candidates[0];
   }
-
   async function aiPick(candidates) {
-    if (!AI_WORKER_URL) return null;
     const taste = buildTaste();
     if (!taste || taste.likedCount < AI_LIKES_THRESHOLD) return null;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), AI_TIMEOUT_MS);
     try {
-      const r = await fetch(AI_WORKER_URL, {
+      const r = await fetch(WORKER, {
         method: 'POST', signal: ctrl.signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1103,10 +972,8 @@
             id: state.current.id, title: state.current.title, movie: state.current.movie,
             artist: state.current.artist, year: state.current.year,
           } : null,
-          taste: {
-            artists: taste.artists, movies: taste.movies, eras: taste.eras,
-            yearCentroid: taste.yearCentroid, likedCount: taste.likedCount,
-          },
+          taste: { artists: taste.artists, movies: taste.movies, eras: taste.eras,
+                    yearCentroid: taste.yearCentroid, likedCount: taste.likedCount },
           history: state.history.slice(-5),
           candidates: candidates.map((c) => ({
             id: c.id, title: c.title, movie: c.movie, artist: c.artist, year: c.year,
@@ -1119,7 +986,6 @@
       return candidates.find((c) => c.id === data.id) || null;
     } catch (_) { clearTimeout(timer); return null; }
   }
-
   let nextPickCache = null;
   async function prefetchNext() {
     const cands = sampleCandidates(AI_CANDIDATE_COUNT);
@@ -1133,9 +999,7 @@
     nextPickCache = ai || heuristicPick(cands);
   }
   function pickNext() {
-    if (nextPickCache) {
-      const p = nextPickCache; nextPickCache = null; return p;
-    }
+    if (nextPickCache) { const p = nextPickCache; nextPickCache = null; return p; }
     const cands = sampleCandidates(AI_CANDIDATE_COUNT);
     if (!cands.length) return null;
     const taste = buildTaste();
@@ -1145,7 +1009,23 @@
     return heuristicPick(cands);
   }
 
-  /* ---------- LYRICS (LRClib) ---------- */
+  /* ---------- DES decryption (for searched songs) ---------- */
+  function desDecryptUrl(b64) {
+    if (!window.CryptoJS) return null;
+    try {
+      const key = CryptoJS.enc.Utf8.parse('38346591');
+      const ct = CryptoJS.enc.Base64.parse(b64);
+      const cp = CryptoJS.lib.CipherParams.create({ ciphertext: ct });
+      const dec = CryptoJS.DES.decrypt(cp, key, {
+        mode: CryptoJS.mode.ECB,
+        padding: CryptoJS.pad.Pkcs7,
+      });
+      const url = dec.toString(CryptoJS.enc.Utf8).trim();
+      return url.startsWith('http') ? url.replace(/_(96|128)\.mp4$/, '_160.mp4') : null;
+    } catch (e) { return null; }
+  }
+
+  /* ---------- LYRICS ---------- */
   function parseLRC(text) {
     if (!text) return null;
     const out = [];
@@ -1161,12 +1041,14 @@
     out.sort((a, b) => a.time - b.time);
     return out.length ? out : null;
   }
-
-  async function fetchLyrics(song) {
-    if (!song) return null;
-    if (lyricsState.abort) lyricsState.abort.abort();
-    lyricsState.abort = new AbortController();
-    const sig = lyricsState.abort.signal;
+  // Heuristic: are these lyrics in Latin script (English)?
+  function isLatinScript(text) {
+    const sample = text.slice(0, 600);
+    const latin = (sample.match(/[A-Za-z]/g) || []).length;
+    const nonAscii = (sample.match(/[ऀ-෿]/g) || []).length; // Indic scripts
+    return latin > 30 && nonAscii < 10;
+  }
+  async function fetchLyrics(song, signal) {
     const enc = encodeURIComponent;
     const tryUrls = [
       `https://lrclib.net/api/get?artist_name=${enc(song.artist || '')}&track_name=${enc(song.title || '')}&album_name=${enc(song.movie || '')}&duration=${song.duration || ''}`,
@@ -1175,50 +1057,82 @@
     ];
     for (const url of tryUrls) {
       try {
-        const r = await fetch(url, { signal: sig });
+        const r = await fetch(url, { signal });
         if (!r.ok) continue;
         const data = await r.json();
         if (data && data.syncedLyrics) {
           const parsed = parseLRC(data.syncedLyrics);
-          if (parsed) return parsed;
+          if (parsed) return { lines: parsed, raw: data.syncedLyrics };
         }
       } catch (e) { if (e.name === 'AbortError') return null; }
     }
     try {
       const q = (song.title || '') + ' ' + (song.movie || '');
-      const r = await fetch(`https://lrclib.net/api/search?q=${enc(q.trim())}`, { signal: sig });
+      const r = await fetch(`https://lrclib.net/api/search?q=${enc(q.trim())}`, { signal });
       if (r.ok) {
         const arr = await r.json();
         const match = Array.isArray(arr) && arr.find((x) => x && x.syncedLyrics);
         if (match) {
           const parsed = parseLRC(match.syncedLyrics);
-          if (parsed) return parsed;
+          if (parsed) return { lines: parsed, raw: match.syncedLyrics };
         }
       }
     } catch (e) { if (e.name === 'AbortError') return null; }
     return null;
   }
+  // Translate raw English lyrics block (with timestamps) to Telugu via worker.
+  async function translateLyrics(rawLrc, signal) {
+    // Pull just the text lines; keep timestamps to re-attach later.
+    const lines = rawLrc.split('\n').filter(Boolean);
+    const stamps = lines.map((l) => {
+      const m = l.match(/^\[[^\]]*\]+/);
+      return { stamp: m ? m[0] : '', text: l.replace(/^\[[^\]]*\]+/, '').trim() };
+    });
+    const englishOnly = stamps.map((s) => s.text).join('\n');
+    if (!englishOnly.trim()) return null;
+    try {
+      const r = await fetch(WORKER + '/translate', {
+        method: 'POST', signal,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: englishOnly }),
+      });
+      if (!r.ok) return null;
+      const data = await r.json();
+      const translated = (data.translation || '').split('\n');
+      // Re-attach timestamps line-by-line; if mismatch, use shorter length
+      const n = Math.min(stamps.length, translated.length);
+      const merged = [];
+      for (let i = 0; i < n; i++) {
+        const t = translated[i].trim();
+        if (!t) continue;
+        merged.push(stamps[i].stamp + ' ' + t);
+      }
+      return merged.join('\n');
+    } catch (e) { return null; }
+  }
 
   function showLyricsState(text, kind) {
     $('lyrics-state').classList.remove('hidden');
     $('lyrics-state-text').textContent = text;
-    $('lyrics-track').innerHTML = '';
-    const stateEl = $('lyrics-state');
-    const iconEl = stateEl.querySelector('.icon');
-    if (iconEl) {
-      iconEl.textContent = kind === 'searching' ? 'search' :
-                            kind === 'instrumental' ? 'music_note' : 'lyrics';
+    const icon = $('lyrics-state-icon');
+    if (icon) {
+      icon.textContent = kind === 'searching' ? 'search'
+                        : kind === 'instrumental' ? 'music_note'
+                        : 'lyrics';
     }
+    $('lyrics-state-label').textContent = kind === 'searching' ? 'Lyrics' : kind === 'instrumental' ? '' : 'Lyrics';
+    $('lyrics-track').innerHTML = '';
+    $('lyrics-badge').classList.remove('show');
   }
-  function hideLyricsState() {
-    $('lyrics-state').classList.add('hidden');
-  }
+  function hideLyricsState() { $('lyrics-state').classList.add('hidden'); }
   function clearLyrics() {
     lyricsState.lines = null;
     lyricsState.activeIdx = -1;
     lyricsState.forSongId = null;
+    lyricsState.isTranslated = false;
     $('lyrics-track').innerHTML = '';
     $('lyrics-track').style.transform = '';
+    $('lyrics-badge').classList.remove('show');
   }
   function renderLyricsLines() {
     hideLyricsState();
@@ -1231,6 +1145,7 @@
       el.textContent = line.text;
       track.appendChild(el);
     });
+    $('lyrics-badge').classList.toggle('show', lyricsState.isTranslated);
     lyricsState.activeIdx = -1;
     updateActiveLyric();
   }
@@ -1257,11 +1172,9 @@
       const card = $('lyrics-card');
       const cardH = card.clientHeight;
       const lineCenter = activeEl.offsetTop + activeEl.offsetHeight / 2;
-      const offset = (cardH / 2) - lineCenter;
-      track.style.transform = `translateY(${offset}px)`;
+      track.style.transform = `translateY(${(cardH / 2) - lineCenter}px)`;
     }
   }
-
   function setSkipMode(on) {
     lyricsState.skipMode = !!on;
     localStorage.setItem(SKIP_NO_LYRICS_KEY, JSON.stringify(!!on));
@@ -1272,14 +1185,33 @@
   async function loadLyricsForCurrentSong() {
     const song = state.current;
     if (!song) return;
-    showLyricsState('Looking for lyrics…', 'searching');
-    const lines = await fetchLyrics(song);
+    if (lyricsState.abort) lyricsState.abort.abort();
+    lyricsState.abort = new AbortController();
+    const sig = lyricsState.abort.signal;
+    showLyricsState('Searching for lyrics…', 'searching');
+    const got = await fetchLyrics(song, sig);
     if (!state.current || state.current.id !== song.id) return;
-    if (lines) {
+    if (got) {
       lyricsState.consecutiveSkips = 0;
-      lyricsState.lines = lines;
+      lyricsState.lines = got.lines;
       lyricsState.forSongId = song.id;
+      lyricsState.isTranslated = false;
       renderLyricsLines();
+      // If lyrics are in English (Latin script) and not Telugu, translate.
+      if (isLatinScript(got.lines.map((l) => l.text).join(' '))) {
+        showToast('Translating lyrics to Telugu…', 1500);
+        const translatedRaw = await translateLyrics(got.raw, sig);
+        if (state.current?.id !== song.id) return;
+        if (translatedRaw) {
+          const teluguLines = parseLRC(translatedRaw);
+          if (teluguLines && teluguLines.length) {
+            lyricsState.lines = teluguLines;
+            lyricsState.activeIdx = -1;
+            lyricsState.isTranslated = true;
+            renderLyricsLines();
+          }
+        }
+      }
     } else {
       if (lyricsState.skipMode) {
         lyricsState.consecutiveSkips++;
@@ -1298,7 +1230,7 @@
     }
   }
 
-  /* ---------- AUDIO ENGINE ---------- */
+  /* ---------- AUDIO ---------- */
   const audio = $('audio');
   audio.addEventListener('play',  () => { state.isPlaying = true;  renderPlayState(); });
   audio.addEventListener('pause', () => { state.isPlaying = false; renderPlayState(); });
@@ -1324,17 +1256,16 @@
     if (!song) return;
     if (state.current) pushHistory(state.current.id);
     state.current = song;
-    const frame = $('art-frame');
-    frame.classList.remove('spin-burst');
-    void frame.offsetWidth;
-    frame.classList.add('spin-burst');
+    const art = $('hero-art');
+    art.classList.remove('spin-burst'); void art.offsetWidth; art.classList.add('spin-burst');
     state.isMystery = !!opts.mystery;
     audio.src = song.url;
     audio.play().catch(() => {});
     renderNowPlaying();
     updateMediaSession(song);
     clearLyrics();
-    setTimeout(() => loadLyricsForCurrentSong(), 50);
+    // Fire lyrics fetch IMMEDIATELY (parallel to audio load) — feels smooth
+    setTimeout(() => loadLyricsForCurrentSong(), 0);
     setTimeout(() => prefetchNext(), 200);
   }
   function togglePlay() {
@@ -1361,9 +1292,7 @@
     $('btn-play-icon').textContent = state.isPlaying ? 'pause' : 'play_arrow';
     $('btn-play').setAttribute('aria-label', state.isPlaying ? 'Pause' : 'Play');
     $('surface').classList.toggle('playing', state.isPlaying);
-    if ('mediaSession' in navigator) {
-      navigator.mediaSession.playbackState = state.isPlaying ? 'playing' : 'paused';
-    }
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = state.isPlaying ? 'playing' : 'paused';
   }
   function renderNowPlaying() {
     const s = state.current;
@@ -1377,7 +1306,7 @@
     $('meta-movie').textContent = s.movie || '— Telugu film —';
     $('meta-title').textContent = s.title;
     $('meta-artist').textContent = s.artist + (s.year ? ` · ${s.year}` : '');
-    $('art-img').style.backgroundImage = `url("${s.cover}")`;
+    $('hero-art').style.backgroundImage = `url("${s.cover}")`;
     $('btn-like').classList.toggle('liked', state.likes.has(s.id));
     $('btn-like').setAttribute('aria-pressed', state.likes.has(s.id) ? 'true' : 'false');
     syncDialHighlight();
@@ -1433,15 +1362,14 @@
     }
   }
 
-  /* ---------- SWIPE on art card ---------- */
+  /* ---------- SWIPE on hero (art card) ---------- */
   function wireSwipe() {
-    const card = $('art-card');
-    const frame = $('art-frame');
+    const card = $('hero');
+    const art = $('hero-art');
     let startX = 0, startY = 0, dx = 0, dy = 0, swiping = false;
     function onStart(e) {
       const t = e.touches ? e.touches[0] : e;
       startX = t.clientX; startY = t.clientY; dx = 0; dy = 0; swiping = true;
-      card.classList.add('swiping');
     }
     function onMove(e) {
       if (!swiping) return;
@@ -1449,35 +1377,90 @@
       dx = t.clientX - startX;
       dy = t.clientY - startY;
       if (Math.abs(dy) > Math.abs(dx) * 1.4) { onCancel(); return; }
-      frame.style.transform = `translateX(${dx * 0.4}px)`;
-      frame.style.opacity = String(Math.max(0.6, 1 - Math.abs(dx) / 320));
+      art.style.transform = `translateX(${dx * 0.4}px)`;
+      art.style.opacity = String(Math.max(0.6, 1 - Math.abs(dx) / 320));
     }
     function onEnd() {
       if (!swiping) return;
       swiping = false;
-      card.classList.remove('swiping');
-      frame.style.transform = '';
-      frame.style.opacity = '';
+      art.style.transform = '';
+      art.style.opacity = '';
       if (Math.abs(dx) > 60) {
-        if (dx < 0) nextRandom();
-        else prev();
+        if (dx < 0) nextRandom(); else prev();
       }
     }
     function onCancel() {
       swiping = false;
-      card.classList.remove('swiping');
-      frame.style.transform = '';
-      frame.style.opacity = '';
+      art.style.transform = '';
+      art.style.opacity = '';
     }
     card.addEventListener('touchstart', onStart, { passive: true });
     card.addEventListener('touchmove', onMove, { passive: true });
     card.addEventListener('touchend', onEnd);
     card.addEventListener('touchcancel', onCancel);
-    let mouseDown = false;
-    card.addEventListener('mousedown', (e) => { mouseDown = true; onStart(e); });
-    card.addEventListener('mousemove', (e) => { if (mouseDown) onMove(e); });
-    card.addEventListener('mouseup', () => { if (mouseDown) { mouseDown = false; onEnd(); } });
-    card.addEventListener('mouseleave', () => { if (mouseDown) { mouseDown = false; onCancel(); } });
+  }
+
+  /* ---------- SEARCH ---------- */
+  let searchTimer = null;
+  let searchAbort = null;
+  function showSearchResults(html) {
+    $('search-results').innerHTML = html;
+    $('search-results').classList.add('show');
+  }
+  function hideSearchResults() {
+    $('search-results').classList.remove('show');
+  }
+  async function performSearch(q) {
+    if (q.length < 2) { hideSearchResults(); return; }
+    if (searchAbort) searchAbort.abort();
+    searchAbort = new AbortController();
+    showSearchResults('<div class="search-loading">Searching…</div>');
+    try {
+      const r = await fetch(`${WORKER}/search?q=${encodeURIComponent(q)}`, { signal: searchAbort.signal });
+      if (!r.ok) { showSearchResults('<div class="search-empty">Search failed</div>'); return; }
+      const data = await r.json();
+      const items = data.results || [];
+      if (!items.length) { showSearchResults('<div class="search-empty">No matches in JioSaavn</div>'); return; }
+      const html = items.map((s) =>
+        `<button class="search-result" data-id="${s.id}" type="button">
+           <div class="search-result-cover" style="background-image:url('${s.cover}')"></div>
+           <div class="search-result-info">
+             <div class="search-result-title">${escapeHtml(s.title)}</div>
+             <div class="search-result-sub">${escapeHtml(s.movie)} · ${escapeHtml(s.artist)}${s.year ? ` · ${s.year}` : ''}</div>
+           </div>
+         </button>`
+      ).join('');
+      showSearchResults(html);
+    } catch (e) {
+      if (e.name !== 'AbortError') showSearchResults('<div class="search-empty">Search error</div>');
+    }
+  }
+  function escapeHtml(s) {
+    return (s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  }
+  async function playSearchedSong(id) {
+    showToast('Loading…', 1500);
+    try {
+      const r = await fetch(`${WORKER}/play?id=${encodeURIComponent(id)}`);
+      if (!r.ok) { showToast('Couldn’t load song'); return; }
+      const data = await r.json();
+      if (!data.encryptedUrl) { showToast('No audio available'); return; }
+      const url = desDecryptUrl(data.encryptedUrl);
+      if (!url) { showToast('Couldn’t decrypt audio'); return; }
+      const song = {
+        id: data.id, title: data.title, artist: data.artist, movie: data.movie,
+        url, cover: data.cover, year: data.year, duration: data.duration,
+        era: pickEra(data.year),
+      };
+      // Add to in-memory catalog (so likes etc. work)
+      if (!state.catalog.find((s) => s.id === song.id)) state.catalog.push(song);
+      hideSearchResults();
+      $('search-input').value = '';
+      $('search-clear').hidden = true;
+      play(song);
+    } catch (e) {
+      showToast('Couldn’t load song');
+    }
   }
 
   /* ---------- WIRE UI ---------- */
@@ -1493,13 +1476,10 @@
       if (state.catalog.length) nextRandom();
     });
   });
-
   $('shuffle-mega').addEventListener('click', () => {
     if ($('shuffle-mega').disabled) return;
-    const icon = $('shuffle-icon');
-    icon.classList.remove('spin-burst');
-    void icon.offsetWidth;
-    icon.classList.add('spin-burst');
+    const btn = $('shuffle-mega');
+    btn.classList.remove('spin'); void btn.offsetWidth; btn.classList.add('spin');
     nextRandom();
   });
   $('btn-play').addEventListener('click', togglePlay);
@@ -1517,19 +1497,44 @@
     nextPickCache = null;
     setTimeout(() => prefetchNext(), 100);
   });
-  $('btn-keys').addEventListener('click', () => {
-    showToast('Space play · ←/→ skip · S shuffle · L like · M mystery', 4000);
-  });
   $('btn-lyrics-mode').addEventListener('click', () => {
     setSkipMode(!lyricsState.skipMode);
-    showToast(lyricsState.skipMode ? 'Skip mode ON · songs without lyrics auto-skip' : 'Skip mode OFF · all songs play', 3000);
+    showToast(lyricsState.skipMode ? 'Skip songs without lyrics: ON' : 'Skip songs without lyrics: OFF', 2500);
   });
   $('btn-theme').addEventListener('click', () => {
     state.theme = state.theme === 'dark' ? 'light' : 'dark';
     applyTheme(state.theme);
-    showToast(state.theme === 'dark' ? 'Dark mode' : 'Light mode', 1500);
   });
   setSkipMode(lyricsState.skipMode);
+
+  // Search input
+  const searchInput = $('search-input');
+  searchInput.addEventListener('input', (e) => {
+    const q = e.target.value.trim();
+    $('search-clear').hidden = !q;
+    clearTimeout(searchTimer);
+    if (!q) { hideSearchResults(); return; }
+    searchTimer = setTimeout(() => performSearch(q), 280);
+  });
+  searchInput.addEventListener('focus', () => {
+    if (searchInput.value.trim().length >= 2) $('search-results').classList.add('show');
+  });
+  $('search-clear').addEventListener('click', () => {
+    searchInput.value = '';
+    $('search-clear').hidden = true;
+    hideSearchResults();
+    searchInput.focus();
+  });
+  $('search-results').addEventListener('click', (e) => {
+    const btn = e.target.closest('.search-result');
+    if (!btn) return;
+    const id = btn.dataset.id;
+    if (id) playSearchedSong(id);
+  });
+  // Close search dropdown when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.search-wrap')) hideSearchResults();
+  });
 
   $('progress').addEventListener('click', (ev) => {
     const rect = ev.currentTarget.getBoundingClientRect();
@@ -1542,7 +1547,6 @@
     audio.currentTime = Math.max(0, Math.min(audio.duration, audio.currentTime + dir * 5));
     e.preventDefault();
   });
-
   window.addEventListener('keydown', (e) => {
     if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
@@ -1552,21 +1556,18 @@
     else if (e.key.toLowerCase() === 'l') $('btn-like').click();
     else if (e.key.toLowerCase() === 'm') $('btn-mystery').click();
     else if (e.key.toLowerCase() === 't') $('btn-theme').click();
+    else if (e.key === '/') { e.preventDefault(); searchInput.focus(); }
   });
 
   /* ---------- BOOT ---------- */
   applyTheme(state.theme);
-  $('mood-text').textContent = moodForNow();
   wireMediaSession();
   wireSwipe();
-
   loadCatalog().then((cat) => {
     state.catalog = cat;
     refreshChips();
     $('booting').classList.add('hidden');
-    if (!cat.length) {
-      showToast('Couldn’t load catalogue · check connection', 5000);
-    }
+    if (!cat.length) showToast('Couldn’t load catalogue · check connection', 5000);
   }).catch(() => {
     $('booting').classList.add('hidden');
     showToast('Catalogue load failed · check connection', 5000);
