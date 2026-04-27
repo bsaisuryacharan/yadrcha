@@ -674,6 +674,89 @@
   .vinyl-stage {
     will-change: transform;
   }
+
+  /* ============== LYRICS OVERLAY ============== */
+  /* Sits over the vinyl-art. Shows synced lyrics (LRClib) when the
+     current song has them. Edge-faded, centered, scrolls with playback. */
+  .lyrics-overlay {
+    position: absolute;
+    inset: 4%;                         /* matches vinyl-art inset */
+    border-radius: 50%;
+    background: rgba(7,5,15,0.78);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    overflow: hidden;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    pointer-events: none;
+    z-index: 3;
+    /* fade top/bottom edges so lines vanish at the rim of the disc */
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, black 22%, black 78%, transparent 100%);
+            mask-image: linear-gradient(180deg, transparent 0%, black 22%, black 78%, transparent 100%);
+    opacity: 0;
+    transition: opacity var(--t-med);
+  }
+  .lyrics-overlay.show { display: flex; opacity: 1; }
+  .lyrics-track {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    will-change: transform;
+    transition: transform 420ms cubic-bezier(.4,0,.2,1);
+    width: 100%;
+    padding: 0 14px;
+  }
+  .lyrics-line {
+    font-family: "DM Serif Display";
+    font-style: italic;
+    font-size: 13px;
+    line-height: 1.32;
+    margin: 5px 0;
+    text-align: center;
+    color: rgba(255,255,255,0.32);
+    transition: color 380ms, font-size 380ms, transform 380ms, opacity 380ms;
+    max-width: 100%;
+    word-wrap: break-word;
+    opacity: 0.55;
+  }
+  .lyrics-line.active {
+    color: #fff;
+    font-size: 17px;
+    font-weight: 600;
+    opacity: 1;
+    text-shadow: 0 0 14px rgba(236,72,153,0.55), 0 0 28px rgba(99,102,241,0.3);
+    transform: scale(1.04);
+  }
+  .lyrics-line.near {
+    color: rgba(255,255,255,0.62);
+    font-size: 14px;
+    opacity: 0.85;
+  }
+  .lyrics-loader {
+    color: var(--fg-muted);
+    font-size: 11px;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    text-align: center;
+    padding: 0 24px;
+  }
+  .lyrics-loader.placeholder {
+    font-family: "DM Serif Display";
+    font-style: italic;
+    font-size: 18px;
+    text-transform: none;
+    letter-spacing: 0.5px;
+    color: var(--fg-muted);
+    line-height: 1.3;
+  }
+
+  /* lyrics-mode toggle button (top bar) */
+  .icon-btn.toggle.on {
+    background: linear-gradient(135deg, var(--hot), var(--indigo));
+    color: #fff;
+  }
   .vinyl-stage.swiping {
     transition: transform 200ms ease-out;
   }
@@ -716,6 +799,12 @@
             </span>
             <span>YADRCHA</span>
           </div>
+          <button class="icon-btn toggle" id="btn-lyrics-mode" type="button" aria-label="Skip songs without lyrics" title="Skip songs without synced lyrics">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M9 18V5l12-2v13"/>
+              <path d="M3 9h6M3 13h6M3 17h6"/>
+            </svg>
+          </button>
           <button class="icon-btn" id="btn-keys" type="button" aria-label="Keyboard shortcuts" title="Shortcuts">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="2" y="6" width="20" height="14" rx="2"/>
@@ -742,6 +831,9 @@
               <div class="vinyl-shine" aria-hidden="true"></div>
             </div>
             <div class="vinyl-spindle" aria-hidden="true"></div>
+            <div class="lyrics-overlay" id="lyrics-overlay" aria-live="polite">
+              <div class="lyrics-track" id="lyrics-track"></div>
+            </div>
           </div>
           <div class="tonearm" aria-hidden="true">
             <div class="pivot"></div>
@@ -878,6 +970,18 @@
     try { localStorage.setItem(HISTORY_KEY, JSON.stringify(state.history)); }
     catch (_) {}
   }
+
+  /* ---------- Lyrics state ---------- */
+  const SKIP_NO_LYRICS_KEY = 'yadrcha.skipNoLyrics';
+  const lyricsState = {
+    lines: null,                 // [{time, text}] | null
+    activeIdx: -1,
+    forSongId: null,             // which song these lyrics belong to
+    abort: null,
+    skipMode: JSON.parse(localStorage.getItem(SKIP_NO_LYRICS_KEY) ?? 'true'),
+    consecutiveSkips: 0,
+    MAX_CONSECUTIVE_SKIPS: 8,
+  };
 
   /* ---------- Utils ---------- */
   const fmt = (t) => {
@@ -1123,6 +1227,181 @@
     return heuristicPick(cands);
   }
 
+  /* ---------- Synced lyrics (LRClib, free public API) ----------
+     Fetch flow per song:
+       1. /api/get with exact artist+title+album+duration
+       2. Fallback /api/search if direct miss, look for first synced match
+     Parse the LRC `[mm:ss.xx] line` format into {time, text} array.
+     If skipMode=true and no synced lyrics found, skip to next song
+     (capped to prevent infinite skip loops on poorly-covered eras). */
+  function parseLRC(text) {
+    if (!text) return null;
+    const out = [];
+    text.split('\n').forEach((line) => {
+      // Multiple timestamps can prefix the same lyric line: [00:12.44][00:18.35] text
+      const stamps = [...line.matchAll(/\[(\d+):(\d+(?:\.\d+)?)\]/g)];
+      const lyric = line.replace(/\[[^\]]*\]/g, '').trim();
+      if (!stamps.length || !lyric) return;
+      stamps.forEach((m) => {
+        const t = parseInt(m[1], 10) * 60 + parseFloat(m[2]);
+        if (isFinite(t)) out.push({ time: t, text: lyric });
+      });
+    });
+    out.sort((a, b) => a.time - b.time);
+    return out.length ? out : null;
+  }
+
+  async function fetchLyrics(song) {
+    if (!song) return null;
+    if (lyricsState.abort) lyricsState.abort.abort();
+    lyricsState.abort = new AbortController();
+    const sig = lyricsState.abort.signal;
+
+    const enc = encodeURIComponent;
+    const tryUrls = [
+      `https://lrclib.net/api/get?artist_name=${enc(song.artist || '')}&track_name=${enc(song.title || '')}&album_name=${enc(song.movie || '')}&duration=${song.duration || ''}`,
+      // Without duration in case the catalog duration disagrees with LRClib's
+      `https://lrclib.net/api/get?artist_name=${enc(song.artist || '')}&track_name=${enc(song.title || '')}&album_name=${enc(song.movie || '')}`,
+      // Without album (movie name)
+      `https://lrclib.net/api/get?artist_name=${enc(song.artist || '')}&track_name=${enc(song.title || '')}`,
+    ];
+    for (const url of tryUrls) {
+      try {
+        const r = await fetch(url, { signal: sig });
+        if (!r.ok) continue;
+        const data = await r.json();
+        if (data && data.syncedLyrics) {
+          const parsed = parseLRC(data.syncedLyrics);
+          if (parsed) return parsed;
+        }
+      } catch (e) {
+        if (e.name === 'AbortError') return null;
+      }
+    }
+    // Final fallback: search endpoint
+    try {
+      const q = (song.title || '') + ' ' + (song.movie || '');
+      const r = await fetch(`https://lrclib.net/api/search?q=${enc(q.trim())}`, { signal: sig });
+      if (r.ok) {
+        const arr = await r.json();
+        const match = Array.isArray(arr) && arr.find((x) => x && x.syncedLyrics);
+        if (match) {
+          const parsed = parseLRC(match.syncedLyrics);
+          if (parsed) return parsed;
+        }
+      }
+    } catch (e) {
+      if (e.name === 'AbortError') return null;
+    }
+    return null;
+  }
+
+  function clearLyrics() {
+    lyricsState.lines = null;
+    lyricsState.activeIdx = -1;
+    lyricsState.forSongId = null;
+    const ov = $('lyrics-overlay');
+    ov.classList.remove('show');
+    $('lyrics-track').innerHTML = '';
+  }
+
+  function renderLyricsLines() {
+    const track = $('lyrics-track');
+    track.innerHTML = '';
+    if (!lyricsState.lines) return;
+    lyricsState.lines.forEach((line, i) => {
+      const el = document.createElement('div');
+      el.className = 'lyrics-line';
+      el.dataset.idx = i;
+      el.textContent = line.text;
+      track.appendChild(el);
+    });
+    $('lyrics-overlay').classList.add('show');
+    lyricsState.activeIdx = -1;
+    updateActiveLyric();
+  }
+
+  function showLyricsPlaceholder(message, kind) {
+    const track = $('lyrics-track');
+    track.innerHTML = '';
+    const el = document.createElement('div');
+    el.className = 'lyrics-loader' + (kind === 'placeholder' ? ' placeholder' : '');
+    el.textContent = message;
+    track.appendChild(el);
+    $('lyrics-overlay').classList.add('show');
+  }
+
+  function updateActiveLyric() {
+    if (!lyricsState.lines || !lyricsState.lines.length) return;
+    const t = audio.currentTime || 0;
+    let idx = -1;
+    for (let i = 0; i < lyricsState.lines.length; i++) {
+      if (lyricsState.lines[i].time <= t + 0.05) idx = i;
+      else break;
+    }
+    if (idx === lyricsState.activeIdx) return;
+    lyricsState.activeIdx = idx;
+    const track = $('lyrics-track');
+    const lines = track.children;
+    let activeEl = null;
+    for (let i = 0; i < lines.length; i++) {
+      const el = lines[i];
+      el.classList.remove('active', 'near');
+      if (i === idx) { el.classList.add('active'); activeEl = el; }
+      else if (Math.abs(i - idx) === 1) el.classList.add('near');
+    }
+    // Smooth scroll: translate the track so the active line sits in the
+    // overlay's center.
+    if (activeEl) {
+      const overlay = $('lyrics-overlay');
+      const overlayH = overlay.clientHeight;
+      const lineCenter = activeEl.offsetTop + activeEl.offsetHeight / 2;
+      const offset = (overlayH / 2) - lineCenter;
+      track.style.transform = `translateY(${offset}px)`;
+    }
+  }
+
+  function setSkipMode(on) {
+    lyricsState.skipMode = !!on;
+    localStorage.setItem(SKIP_NO_LYRICS_KEY, JSON.stringify(!!on));
+    $('btn-lyrics-mode').classList.toggle('on', !!on);
+    $('btn-lyrics-mode').setAttribute('aria-pressed', !!on ? 'true' : 'false');
+  }
+
+  async function loadLyricsForCurrentSong() {
+    const song = state.current;
+    if (!song) return;
+    showLyricsPlaceholder('Looking for lyrics…', 'loader');
+    const lines = await fetchLyrics(song);
+    // Song may have changed while we were fetching
+    if (!state.current || state.current.id !== song.id) return;
+    if (lines) {
+      lyricsState.consecutiveSkips = 0;
+      lyricsState.lines = lines;
+      lyricsState.forSongId = song.id;
+      renderLyricsLines();
+      updateActiveLyric();
+    } else {
+      // No synced lyrics for this song
+      if (lyricsState.skipMode) {
+        lyricsState.consecutiveSkips++;
+        if (lyricsState.consecutiveSkips >= lyricsState.MAX_CONSECUTIVE_SKIPS) {
+          showToast('Skip mode disabled — too many songs lack lyrics', 4000);
+          setSkipMode(false);
+          lyricsState.consecutiveSkips = 0;
+          showLyricsPlaceholder('♫ Instrumental ♫', 'placeholder');
+        } else {
+          showToast(`No lyrics · skipping (${lyricsState.consecutiveSkips}/${lyricsState.MAX_CONSECUTIVE_SKIPS})`, 1400);
+          // Slight delay so the user sees the toast before next song loads
+          setTimeout(() => nextRandom(), 350);
+        }
+      } else {
+        // Skip mode off — show a polite placeholder, keep playing
+        showLyricsPlaceholder('♫ No synced lyrics ♫', 'placeholder');
+      }
+    }
+  }
+
   /* ---------- Audio engine: HTML5 audio, full songs ---------- */
   const audio = $('audio');
   audio.addEventListener('play',  () => { state.isPlaying = true;  renderPlayState(); });
@@ -1137,6 +1416,10 @@
     $('time-cur').textContent = fmt(cur);
     $('time-tot').textContent = fmt(tot);
     $('progress').setAttribute('aria-valuenow', Math.round(pct));
+    // Sync the lyrics overlay to the current playback position
+    if (lyricsState.lines && lyricsState.forSongId === state.current?.id) {
+      updateActiveLyric();
+    }
   });
   audio.addEventListener('error', () => {
     showToast('Couldn’t play that one · skipping');
@@ -1155,6 +1438,9 @@
     audio.play().catch(() => {});
     renderNowPlaying();
     updateMediaSession(song);
+    // Clear the previous song's lyrics + start fetching for this one.
+    clearLyrics();
+    setTimeout(() => loadLyricsForCurrentSong(), 50);
     // Pre-fetch the next pick in the background — by the time the user
     // hits Next, the AI/heuristic pick is already chosen → 0ms latency.
     setTimeout(() => prefetchNext(), 200);
@@ -1380,6 +1666,12 @@
   $('btn-keys').addEventListener('click', () => {
     showToast('Space play · ←/→ skip · S shuffle · L like · M mystery', 4000);
   });
+  $('btn-lyrics-mode').addEventListener('click', () => {
+    setSkipMode(!lyricsState.skipMode);
+    showToast(lyricsState.skipMode ? 'Skip mode ON · songs without lyrics auto-skip' : 'Skip mode OFF · all songs play', 3000);
+  });
+  // Initial paint for the toggle (reflect persisted state)
+  setSkipMode(lyricsState.skipMode);
   $('progress').addEventListener('click', (ev) => {
     const rect = ev.currentTarget.getBoundingClientRect();
     const pct = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
