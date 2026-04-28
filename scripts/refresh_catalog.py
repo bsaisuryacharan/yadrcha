@@ -321,7 +321,16 @@ def is_compilation(album: str) -> bool:
 
 
 GENERIC_COVER_RE = re.compile(
-    r'/(playlist-art|editorial|featured|default|charts|category|genre)/',
+    r'/(playlist-art|editorial|featured|default|charts|category|genre|'
+    r'curated|trending|playlist|chart)/',
+    re.IGNORECASE,
+)
+# Words that, when present in the cover URL filename, signal a playlist
+# / editorial / category cover instead of a real movie poster.
+PLAYLIST_FILENAME_RE = re.compile(
+    r'(?:[\-_/])(tollywood|trending|hits[-_]of|playlist|featured|'
+    r'best[-_]of|chart|songs[-_]of|love[-_]songs|romantic[-_]hits|'
+    r'top[-_]hits|valentines[-_]day|patriotic|bgm|score)',
     re.IGNORECASE,
 )
 # Background scores / BGM / instrumentals — these have no lyrics by
@@ -367,6 +376,9 @@ def is_film_song(d: dict) -> bool:
     # Generic playlist/editorial art — not a movie poster
     if GENERIC_COVER_RE.search(image):
         return False
+    # Image filename signals playlist/category/compilation art
+    if PLAYLIST_FILENAME_RE.search(image):
+        return False
     # Image must be present (no cover at all = unusable)
     if not image or not image.startswith('http'):
         return False
@@ -378,13 +390,13 @@ def is_film_song(d: dict) -> bool:
     # Singles / EPs without movie context
     if album_lc.endswith(' - single') or album_lc.endswith(' - ep'):
         return False
-    # Compilation albums — these mistag old songs under a recent year
-    # (e.g. "Tollywood Patriotic Songs 2026" containing songs from 2003).
+    # Compilation albums — drop UNCONDITIONALLY. Even when the title says
+    # "(From \"Real Movie\")", the cover image will still be the
+    # compilation art (e.g. "Tollywood Trending"). The same song from
+    # the original movie album is also in the search results with the
+    # real poster — those are kept. Cleaner UX with this hard filter.
     if is_compilation(album_lc):
-        # Exception: if title says "(From \"Real Movie\")", the song is
-        # actually from a real movie even if packaged on a compilation.
-        if not extract_movie_from_title(d.get('song') or ''):
-            return False
+        return False
     # Background scores / BGM / instrumentals — no vocals, no lyrics
     if BACKGROUND_SCORE_RE.search(album_lc) or BACKGROUND_SCORE_RE.search(title_lc):
         return False

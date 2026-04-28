@@ -127,9 +127,13 @@
     transform-style: preserve-3d;
   }
   .face.front {
-    background-size: cover;
+    /* contain instead of cover — show the whole movie poster, no crop.
+       The blurred poster behind fills the empty space (letterbox area),
+       so the screen still feels full-bleed but the artwork is intact. */
+    background-size: contain;
+    background-repeat: no-repeat;
     background-position: center;
-    background-color: var(--bg-1);
+    background-color: transparent;
     transform: rotateY(0deg);
   }
   .face.back {
@@ -148,21 +152,16 @@
     50% { transform: scale(0.97) rotate(3deg); }
     100% { transform: scale(1) rotate(0); }
   }
-  /* gradient overlay on front cover for legible meta */
+  /* gradient overlay only at the very bottom for meta legibility — won't
+     darken the contained poster. */
   .face.front::after {
     content: "";
     position: absolute; inset: 0;
     background: linear-gradient(180deg,
       transparent 0%,
-      transparent 40%,
-      rgba(0,0,0,0.55) 100%);
+      transparent 65%,
+      rgba(0,0,0,0.65) 100%);
     pointer-events: none;
-  }
-  [data-theme="light"] .face.front::after {
-    background: linear-gradient(180deg,
-      transparent 0%,
-      transparent 40%,
-      rgba(0,0,0,0.45) 100%);
   }
 
   /* ============== UI OVERLAYS on top of cover ============== */
@@ -483,8 +482,13 @@
   .pane-body {
     flex: 1; min-height: 0;
     position: relative;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
   }
+  .pane-body::-webkit-scrollbar { width: 4px; }
+  .pane-body::-webkit-scrollbar-thumb { background: var(--outline); border-radius: 2px; }
 
   /* LYRICS PANE */
   .pane-body.lyrics-body::before, .pane-body.lyrics-body::after {
@@ -505,9 +509,9 @@
   }
   .lyrics-track {
     display: flex; flex-direction: column; align-items: center;
-    will-change: transform;
-    transition: transform 380ms cubic-bezier(.4,0,.2,1);
-    padding: 50% 24px;
+    /* top-anchored. lots of bottom space so the LAST line can scroll
+       up to ~35% from the top of the pane. */
+    padding: 24px 24px 60vh;
     text-align: center;
   }
   .lyrics-line {
@@ -770,9 +774,6 @@
         <button class="icon-pill" id="btn-search" type="button" aria-label="Search">
           <span class="material-symbols-outlined">search</span>
         </button>
-        <button class="icon-pill" id="btn-theme" type="button" aria-label="Toggle theme">
-          <span class="material-symbols-outlined" id="btn-theme-icon">dark_mode</span>
-        </button>
       </div>
 
       <!-- ACTIONS — right side -->
@@ -878,17 +879,8 @@
   }
   function isBgm(text) { return BGM_RE.test(text || ''); }
 
-  /* THEME */
-  function detectInitialTheme() {
-    const saved = localStorage.getItem(THEME_KEY);
-    if (saved === 'light' || saved === 'dark') return saved;
-    return 'dark';
-  }
-  function applyTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
-    try { localStorage.setItem(THEME_KEY, theme); } catch (_) {}
-    $('btn-theme-icon').textContent = theme === 'dark' ? 'light_mode' : 'dark_mode';
-  }
+  // Theme is now permanently dark — full-screen reels feel cinematic
+  // and the foreground takes 90%+ of the screen anyway.
 
   /* STATE */
   const state = {
@@ -899,7 +891,6 @@
     isPlaying: false,
     isMystery: false,
     likes: new Set(JSON.parse(localStorage.getItem('yadrcha.likes') || '[]')),
-    theme: detectInitialTheme(),
     cardMode: 'front',
     queue: [],
   };
@@ -1299,7 +1290,8 @@
     lyricsState.fetchedSongId = null;
     if (lyricsState.abort) lyricsState.abort.abort();
     $('lyrics-track').innerHTML = '';
-    $('lyrics-track').style.transform = '';
+    const body = $('lyrics-body');
+    if (body) body.scrollTop = 0;
   }
   function renderLyricsLines() {
     hideLyricsState();
@@ -1344,10 +1336,12 @@
       else if (Math.abs(i - idx) === 1) el.classList.add('near');
     }
     if (activeEl) {
+      // Scroll the pane so the active line sits ~35% from the top of
+      // the visible area (room above for context, room below for read-ahead).
       const body = $('lyrics-body');
-      const bodyH = body.clientHeight;
       const lineCenter = activeEl.offsetTop + activeEl.offsetHeight / 2;
-      track.style.transform = `translateY(${(bodyH / 2) - lineCenter}px)`;
+      const targetTop = Math.max(0, lineCenter - body.clientHeight * 0.35);
+      body.scrollTo({ top: targetTop, behavior: 'smooth' });
     }
   }
   async function loadLyricsForCurrentSong() {
@@ -1764,11 +1758,6 @@
   $('btn-mystery').addEventListener('click', (e) => { e.stopPropagation(); nextRandom({ mystery: true }); });
   $('btn-flip-back-lyrics').addEventListener('click', (e) => { e.stopPropagation(); flipToFront(); });
   $('btn-flip-back-search').addEventListener('click', (e) => { e.stopPropagation(); flipToFront(); });
-  $('btn-theme').addEventListener('click', (e) => {
-    e.stopPropagation();
-    state.theme = state.theme === 'dark' ? 'light' : 'dark';
-    applyTheme(state.theme);
-  });
   // Cover tap = play/pause (only on front face)
   $('cover-stage').addEventListener('click', (e) => {
     // Only respond if click is directly on the front face (not action buttons)
@@ -1806,13 +1795,11 @@
     else if (e.key.toLowerCase() === 's') nextRandom();
     else if (e.key.toLowerCase() === 'l') $('btn-like').click();
     else if (e.key.toLowerCase() === 'm') $('btn-mystery').click();
-    else if (e.key.toLowerCase() === 't') $('btn-theme').click();
     else if (e.key.toLowerCase() === 'y') toggleLyrics();
     else if (e.key === '/') { e.preventDefault(); toggleSearch(); }
   });
 
   /* BOOT */
-  applyTheme(state.theme);
   wireMediaSession();
   wireSwipe();
   setTimeout(() => {
