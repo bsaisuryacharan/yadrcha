@@ -173,9 +173,14 @@
     transition: opacity var(--t-med);
   }
   .ui-overlay > * { pointer-events: auto; }
-  .cover-stage.flipped ~ .ui-overlay {
-    opacity: 0;
-    pointer-events: none;
+  /* When flipped, force EVERYTHING in the overlay non-clickable so its
+     buttons (search/theme in the top strip) don't hijack clicks aimed at
+     the back-pane's close button which sits at the same screen position. */
+  .cover-stage.flipped ~ .ui-overlay,
+  .cover-stage.flipped ~ .ui-overlay * {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    visibility: hidden;
   }
 
   /* TOP STRIP */
@@ -446,6 +451,18 @@
     border-bottom: 1px solid var(--outline);
     flex-shrink: 0;
     gap: 10px;
+    position: relative;
+    z-index: 10;
+  }
+  .pane-header .icon-pill {
+    background: rgba(255,255,255,0.12);
+    border: 1px solid var(--outline);
+    color: var(--fg);
+    z-index: 11;
+  }
+  [data-theme="light"] .pane-header .icon-pill {
+    background: rgba(0,0,0,0.08);
+    color: var(--fg);
   }
   .pane-title {
     flex: 1; min-width: 0;
@@ -1102,11 +1119,21 @@
         }
         // Pre-fetch lyrics in background — by the time user hits this song,
         // its lyrics are in localStorage cache and toggle is instant.
-        prefetchLyricsBackground(state.queue[state.queue.length - 1]);
+        const queued = state.queue[state.queue.length - 1];
+        prefetchLyricsBackground(queued);
+        // Pre-warm the cover image so swiping to this song shows the real
+        // poster instantly (no flash of generic placeholder).
+        prefetchCover(queued);
       }
     } finally { queueRefilling = false; }
   }
   function clearQueue() { state.queue = []; }
+  function prefetchCover(song) {
+    if (!song?.cover) return;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = song.cover;
+  }
 
   /* DES decryption */
   function desDecryptUrl(b64) {
@@ -1277,12 +1304,16 @@
     lyricsState.activeIdx = -1;
     updateActiveLyric();
   }
+  // Pre-empt the line by ~0.4s so it lights up just BEFORE the audio
+  // reaches it. Karaoke-style lookahead — gives the user time to read
+  // ahead instead of catching up.
+  const LYRICS_LOOKAHEAD = 0.4;
   function updateActiveLyric() {
     if (!lyricsState.lines || !lyricsState.lines.length) return;
     const t = audio.currentTime || 0;
     let idx = -1;
     for (let i = 0; i < lyricsState.lines.length; i++) {
-      if (lyricsState.lines[i].time <= t + 0.05) idx = i; else break;
+      if (lyricsState.lines[i].time <= t + LYRICS_LOOKAHEAD) idx = i; else break;
     }
     if (idx === lyricsState.activeIdx) return;
     lyricsState.activeIdx = idx;

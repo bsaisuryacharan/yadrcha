@@ -291,6 +291,12 @@ def is_compilation(album: str) -> bool:
     return False
 
 
+GENERIC_COVER_RE = re.compile(
+    r'/(playlist-art|editorial|featured|default|charts|category|genre)/',
+    re.IGNORECASE,
+)
+
+
 def is_film_song(d: dict) -> bool:
     """Return True if the song appears to be from a Telugu film soundtrack.
 
@@ -299,12 +305,21 @@ def is_film_song(d: dict) -> bool:
       - has a 'starring' field (movie cast list), OR
       - album_url contains '-telugu' suffix (movie album convention)
       - AND no devotional/non-film keywords in song or album name
+      - AND cover image isn't a generic playlist/editorial placeholder
     """
     title_lc = (d.get('song') or '').lower()
     album_lc = (d.get('album') or '').lower()
     label_lc = (d.get('label') or '').lower()
     album_url = d.get('album_url') or ''
     starring = (d.get('starring') or '').strip()
+    image = d.get('image') or ''
+
+    # Generic playlist/editorial art — not a movie poster
+    if GENERIC_COVER_RE.search(image):
+        return False
+    # Image must be present (no cover at all = unusable)
+    if not image or not image.startswith('http'):
+        return False
 
     # Negative filter — exclude obvious non-film content
     haystack = title_lc + ' ' + album_lc
