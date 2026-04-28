@@ -1188,6 +1188,9 @@
     try { localStorage.setItem(LYRICS_CACHE_PREFIX + songId, JSON.stringify({ ts: Date.now(), data })); }
     catch (_) {}
   }
+  // Hard 6-second budget for the whole LRClib race. Without this, a slow
+  // or unresponsive endpoint pins the UI on "Loading lyrics…" forever.
+  const LYRICS_FETCH_TIMEOUT = 6000;
   async function fetchLyricsRaceParallel(song, signal) {
     const enc = encodeURIComponent;
     const urls = [
@@ -1196,14 +1199,25 @@
       `https://lrclib.net/api/get?artist_name=${enc(song.artist || '')}&track_name=${enc(song.title || '')}`,
     ];
     return new Promise((resolve) => {
-      let resolved = false; let pending = urls.length + 1;
-      const finish = () => { if (!resolved && --pending === 0) resolve(null); };
+      let settled = false;
+      let pending = urls.length + 1;
+      const settle = (val) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(val);
+      };
+      const finish = () => {
+        if (settled) return;
+        if (--pending === 0) settle(null);
+      };
+      const timer = setTimeout(() => settle(null), LYRICS_FETCH_TIMEOUT);
       urls.forEach((u) => {
         fetch(u, { signal }).then((r) => r.ok ? r.json() : null).then((data) => {
-          if (resolved) return;
+          if (settled) return;
           if (data?.syncedLyrics) {
             const parsed = parseLRC(data.syncedLyrics);
-            if (parsed) { resolved = true; resolve({ lines: parsed, raw: data.syncedLyrics }); return; }
+            if (parsed) { settle({ lines: parsed, raw: data.syncedLyrics }); return; }
           }
           finish();
         }).catch(() => finish());
@@ -1212,11 +1226,11 @@
       fetch(`https://lrclib.net/api/search?q=${enc(q.trim())}`, { signal })
         .then((r) => r.ok ? r.json() : null)
         .then((arr) => {
-          if (resolved) return;
+          if (settled) return;
           const match = Array.isArray(arr) && arr.find((x) => x && x.syncedLyrics);
           if (match) {
             const parsed = parseLRC(match.syncedLyrics);
-            if (parsed) { resolved = true; resolve({ lines: parsed, raw: match.syncedLyrics }); return; }
+            if (parsed) { settle({ lines: parsed, raw: match.syncedLyrics }); return; }
           }
           finish();
         })
