@@ -178,6 +178,35 @@ def song_details(song_id: str) -> dict | None:
     return songs[0] if songs else None
 
 
+def probe_lyrics(song: dict) -> str | None:
+    """Query LRClib for synced lyrics. Returns raw LRC text or None.
+
+    Tries 3 progressively-relaxed URL variants (full match → drop duration
+    → drop album). First synced match wins. Skips on any error so the
+    catalog refresh still finishes if LRClib has a hiccup."""
+    enc = urllib.parse.quote
+    artist = song.get('a') or ''
+    title = song.get('t') or ''
+    movie = song.get('m') or ''
+    duration = song.get('d') or ''
+    urls = [
+        f'https://lrclib.net/api/get?artist_name={enc(artist)}&track_name={enc(title)}&album_name={enc(movie)}&duration={duration}',
+        f'https://lrclib.net/api/get?artist_name={enc(artist)}&track_name={enc(title)}&album_name={enc(movie)}',
+        f'https://lrclib.net/api/get?artist_name={enc(artist)}&track_name={enc(title)}',
+    ]
+    for url in urls:
+        try:
+            r = requests.get(url, timeout=8, headers={'User-Agent': 'yadrcha-catalog/1.0'})
+            if r.status_code != 200:
+                continue
+            data = r.json()
+            if data.get('syncedLyrics'):
+                return data['syncedLyrics']
+        except Exception:
+            continue
+    return None
+
+
 def album_songs(album_id: str) -> list[dict]:
     """Returns every song in a JioSaavn album (movie soundtrack).
     This is the multiplier — search only returns 1-2 'popular' songs per
@@ -295,6 +324,27 @@ GENERIC_COVER_RE = re.compile(
     r'/(playlist-art|editorial|featured|default|charts|category|genre)/',
     re.IGNORECASE,
 )
+# Background scores / BGM / instrumentals — these have no lyrics by
+# definition, so they pollute the catalog and trigger "no synced lyrics"
+# user complaints. Drop them at catalog level.
+BACKGROUND_SCORE_RE = re.compile(
+    r'\b(background\s*score|original\s*background|bgm|theme\s*music|'
+    r'original\s*score|bg\s*score|instrumental(?:\s+score)?|interludes?)\b',
+    re.IGNORECASE,
+)
+# "Song Name (From \"Real Movie\")" — JioSaavn's pattern when songs are
+# packaged on compilations but originally from a specific movie.
+FROM_MOVIE_RE = re.compile(
+    r'\(\s*from\s+["“]([^"”]+)["”]\s*\)',
+    re.IGNORECASE,
+)
+
+
+def extract_movie_from_title(title: str) -> str | None:
+    if not title:
+        return None
+    m = FROM_MOVIE_RE.search(title)
+    return m.group(1).strip() if m else None
 
 
 def is_film_song(d: dict) -> bool:
@@ -331,6 +381,12 @@ def is_film_song(d: dict) -> bool:
     # Compilation albums — these mistag old songs under a recent year
     # (e.g. "Tollywood Patriotic Songs 2026" containing songs from 2003).
     if is_compilation(album_lc):
+        # Exception: if title says "(From \"Real Movie\")", the song is
+        # actually from a real movie even if packaged on a compilation.
+        if not extract_movie_from_title(d.get('song') or ''):
+            return False
+    # Background scores / BGM / instrumentals — no vocals, no lyrics
+    if BACKGROUND_SCORE_RE.search(album_lc) or BACKGROUND_SCORE_RE.search(title_lc):
         return False
 
     # Positive signals — need at least one
@@ -354,8 +410,17 @@ def normalize_detail(d: dict) -> dict | None:
     if not media_url:
         return None
     media_url = upgrade_quality(media_url)
-    title = clean_text(d.get('song') or '')
+    title_raw = clean_text(d.get('song') or '')
     album = clean_text(d.get('album') or '')
+    # Override the (often misleading) album name with the real movie name
+    # extracted from the title's "(From \"Movie\")" pattern when present.
+    real_movie = extract_movie_from_title(title_raw)
+    if real_movie:
+        album = real_movie
+        # Strip the "(From ...)" suffix from the displayed title
+        title = FROM_MOVIE_RE.sub('', title_raw).strip()
+    else:
+        title = title_raw
     singers = clean_text(d.get('singers') or d.get('primary_artists') or '')
     music = clean_text(d.get('music') or '')
     artist = singers or music or 'Unknown'
@@ -501,11 +566,50 @@ def main() -> int:
     cat = {'version': 2, 'songs': list(by_id.values())}
     save_catalog(cat)
 
+    # 3. Probe LRClib for every song that hasn't been probed yet, in
+    # parallel. Inline the LRC text into the catalog row so the frontend
+    # never needs a runtime fetch for known songs. This is the senior-
+    # architect move: pre-compute everything at build time, runtime is
+    # zero-network for all known songs.
+    unprobed = [s for s in by_id.values()
+                if 'lr' not in s and 'nl' not in s]
+    print(f'Probing LRClib for {len(unprobed)} songs (4 parallel workers)...')
+    probe_done = 0; probe_hit = 0
+    save_every = 50
+
+    def lyrics_worker(s):
+        return s, probe_lyrics(s)
+
+    if unprobed:
+        with ThreadPoolExecutor(max_workers=4) as ex:
+            futures = [ex.submit(lyrics_worker, s) for s in unprobed]
+            for fut in as_completed(futures):
+                try:
+                    s, raw = fut.result()
+                except Exception as e:
+                    print(f'  ! lyrics-probe exception: {e}', file=sys.stderr)
+                    continue
+                if raw:
+                    s['lr'] = raw
+                    probe_hit += 1
+                else:
+                    s['nl'] = True   # probed, no lyrics
+                probe_done += 1
+                if probe_done % save_every == 0:
+                    print(f'  lyrics {probe_done}/{len(unprobed)} | hit {probe_hit}')
+                    with save_lock:
+                        save_catalog({'version': 2, 'songs': list(by_id.values())})
+
+    save_catalog({'version': 2, 'songs': list(by_id.values())})
+
     total = len(by_id)
+    with_lyrics = sum(1 for s in by_id.values() if 'lr' in s)
     print('=== Done ===')
-    print(f'Songs in catalog: {total} (was {existing_count})')
-    print(f'Added this run:   {found}')
-    print(f'Failed this run:  {failed}')
+    print(f'Songs in catalog:  {total} (was {existing_count})')
+    print(f'Added this run:    {found}')
+    print(f'Failed this run:   {failed}')
+    print(f'With lyrics:       {with_lyrics}')
+    print(f'Lyrics probed:     {probe_done} (hit {probe_hit})')
     return 0
 
 

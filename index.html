@@ -861,20 +861,22 @@
   const AI_LIKES_THRESHOLD = 5;
   const AI_TIMEOUT_MS = 800;
   const AI_CANDIDATE_COUNT = 20;
-  const QUEUE_SIZE = 4;
+  const QUEUE_SIZE = 6;
 
-  // STRICT compilation filter — catches "Best of 2025", "Tollywood Hits 2026", etc.
-  const COMPILATION_RE = /\b(collection|best of|hits of|songs of|compilation|jukebox|patriotic|all time|chartbusters|top hits|top songs|favorites|romantic hits|dance hits|super hits|melody hits|throwback|evergreen|special hit|popular hit|golden hit|playlist|essentials|originals|anthems|vibes|year wise|decade|fresh hits|new hits|hit songs|hit collection|songs collection|love songs|sad songs|party hits|pop hits|hottest hits|trending hits)\b/i;
+  // STRICT compilation filter
+  const COMPILATION_RE = /\b(collection|best of|hits of|songs of|compilation|jukebox|patriotic|all time|chartbusters|top hits|top songs|favorites|romantic hits|dance hits|super hits|melody hits|throwback|evergreen|special hit|popular hit|golden hit|playlist|essentials|originals|anthems|vibes|year wise|decade|fresh hits|new hits|hit songs|hit collection|songs collection|love songs|sad songs|party hits|pop hits|hottest hits|trending hits|valentines|valentine|kavithalu)\b/i;
   const YEAR_TAGGED_RE = /\b(?:19|20)\d{2}\b/;
   const GENERIC_TERMS = /\b(hits?|songs?|telugu|tollywood|pop|romantic|dance|sad|love|fresh|new|special|jukebox|mix|chart|collection|best|top|popular|year)\b/i;
+  // Background scores / BGM — instrumental, no lyrics by definition
+  const BGM_RE = /\b(background\s*score|original\s*background|bgm|theme\s*music|original\s*score|bg\s*score|instrumental(?:\s+score)?|interludes?)\b/i;
 
   function isCompilation(movie) {
     const m = movie || '';
     if (COMPILATION_RE.test(m)) return true;
-    // movie name has a year + generic word = compilation (e.g. "Tollywood 2025 Hits")
     if (YEAR_TAGGED_RE.test(m) && GENERIC_TERMS.test(m)) return true;
     return false;
   }
+  function isBgm(text) { return BGM_RE.test(text || ''); }
 
   /* THEME */
   function detectInitialTheme() {
@@ -954,11 +956,23 @@
     return [];
   }
   function expandCatalog(slim) {
-    return slim.map((s) => ({
-      id: s.i, title: s.t, artist: s.a, movie: s.m,
-      url: s.u, cover: s.c, year: s.y, duration: s.d,
-      plays: s.p || 0, era: pickEra(s.y),
-    }));
+    return slim
+      .filter((s) => {
+        // Defensive runtime filters in case catalog has stale entries
+        if (!s.c || !s.t) return false;
+        if (isCompilation(s.m)) return false;
+        if (isBgm(s.m) || isBgm(s.t)) return false;
+        return true;
+      })
+      .map((s) => ({
+        id: s.i, title: s.t, artist: s.a, movie: s.m,
+        url: s.u, cover: s.c, year: s.y, duration: s.d,
+        plays: s.p || 0, era: pickEra(s.y),
+        // Inline lyrics from build-time probe — instant render, no fetch
+        lyricsRaw: s.lr || null,
+        // Probed-no-lyrics flag — show "Instrumental" instantly
+        noLyrics: !!s.nl,
+      }));
   }
   function saveCache(slim) {
     try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: slim })); }
@@ -1246,8 +1260,11 @@
     } catch (_) { return null; }
   }
   // Background prefetch — silent, populates cache, runs from queue.
+  // Skipped entirely when the catalog already has inline lyrics or a
+  // confirmed no-lyrics flag (build-time pre-probe).
   async function prefetchLyricsBackground(song) {
-    if (!song || getLyricsCache(song.id)) return;
+    if (!song || song.lyricsRaw || song.noLyrics) return;
+    if (getLyricsCache(song.id)) return;
     try {
       const got = await fetchLyricsRaceParallel(song, undefined);
       if (!got) { setLyricsCache(song.id, { lines: null, isTranslated: false }); return; }
@@ -1337,25 +1354,65 @@
     const song = state.current;
     if (!song) return;
     if (lyricsState.fetchedSongId === song.id) return;
+    lyricsState.fetchedSongId = song.id;
+
+    // PATH 1 — inline LRC from catalog (build-time probe). Zero-network,
+    // instant render. This is the fast path for ~95% of lookups when the
+    // catalog has been refreshed with the lyrics-probe step.
+    if (song.lyricsRaw) {
+      const parsed = parseLRC(song.lyricsRaw);
+      if (parsed && parsed.length) {
+        lyricsState.lines = parsed;
+        lyricsState.forSongId = song.id;
+        lyricsState.isTranslated = false;
+        renderLyricsLines();
+        // Translate to Telugu in background if English (non-blocking)
+        if (isLatinScript(parsed.map((l) => l.text).join(' '))) {
+          if (lyricsState.abort) lyricsState.abort.abort();
+          lyricsState.abort = new AbortController();
+          translateLyrics(song.lyricsRaw, lyricsState.abort.signal).then((translatedRaw) => {
+            if (state.current?.id !== song.id || !translatedRaw) return;
+            const teluguLines = parseLRC(translatedRaw);
+            if (teluguLines && teluguLines.length) {
+              lyricsState.lines = teluguLines;
+              lyricsState.activeIdx = -1;
+              lyricsState.isTranslated = true;
+              renderLyricsLines();
+              setLyricsCache(song.id, { lines: teluguLines, isTranslated: true });
+            }
+          });
+        }
+        return;
+      }
+    }
+
+    // PATH 2 — probed-no-lyrics flag. Catalog already confirmed at build
+    // time that LRClib has nothing. Don't bother fetching.
+    if (song.noLyrics) {
+      showLyricsState('Instrumental ♫', 'instrumental', false);
+      return;
+    }
+
+    // PATH 3 — localStorage cache from previous live fetch
     const cached = getLyricsCache(song.id);
     if (cached) {
-      lyricsState.fetchedSongId = song.id;
       if (cached.lines && cached.lines.length) {
         lyricsState.lines = cached.lines;
         lyricsState.forSongId = song.id;
         lyricsState.isTranslated = !!cached.isTranslated;
         renderLyricsLines();
       } else {
-        showLyricsState('No synced lyrics for this song', 'instrumental', false);
+        showLyricsState('Instrumental ♫', 'instrumental', false);
       }
       return;
     }
+
+    // PATH 4 — legacy live fetch (pre-probe songs not yet in fresh catalog)
     if (lyricsState.abort) lyricsState.abort.abort();
     lyricsState.abort = new AbortController();
-    showLyricsState('Searching for lyrics…', 'searching', true);
+    showLyricsState('Loading lyrics…', 'searching', true);
     const got = await fetchLyricsRaceParallel(song, lyricsState.abort.signal);
     if (state.current?.id !== song.id) return;
-    lyricsState.fetchedSongId = song.id;
     if (got) {
       lyricsState.lines = got.lines;
       lyricsState.forSongId = song.id;
@@ -1363,24 +1420,19 @@
       renderLyricsLines();
       setLyricsCache(song.id, { lines: got.lines, isTranslated: false });
       if (isLatinScript(got.lines.map((l) => l.text).join(' '))) {
-        showLyricsState('Translating to Telugu…', 'searching', true);
         const translatedRaw = await translateLyrics(got.raw, lyricsState.abort.signal);
-        if (state.current?.id !== song.id) return;
-        if (translatedRaw) {
-          const teluguLines = parseLRC(translatedRaw);
-          if (teluguLines && teluguLines.length) {
-            lyricsState.lines = teluguLines;
-            lyricsState.activeIdx = -1;
-            lyricsState.isTranslated = true;
-            renderLyricsLines();
-            setLyricsCache(song.id, { lines: teluguLines, isTranslated: true });
-            return;
-          }
+        if (state.current?.id !== song.id || !translatedRaw) return;
+        const teluguLines = parseLRC(translatedRaw);
+        if (teluguLines && teluguLines.length) {
+          lyricsState.lines = teluguLines;
+          lyricsState.activeIdx = -1;
+          lyricsState.isTranslated = true;
+          renderLyricsLines();
+          setLyricsCache(song.id, { lines: teluguLines, isTranslated: true });
         }
-        renderLyricsLines();
       }
     } else {
-      showLyricsState('No synced lyrics for this song', 'instrumental', false);
+      showLyricsState('Instrumental ♫', 'instrumental', false);
       setLyricsCache(song.id, { lines: null, isTranslated: false });
     }
   }
