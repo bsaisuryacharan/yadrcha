@@ -265,11 +265,30 @@ NON_FILM_TERMS = {
 # Latest era stays actually fresh.
 COMPILATION_RE = re.compile(
     r'\b(collection|best of|hits of|songs of|compilation|jukebox|patriotic|'
-    r'all time|chartbusters|top hits|favorites|romantic hits|dance hits|'
+    r'all time|chartbusters|top hits|top songs|favorites|romantic hits|dance hits|'
     r'super hits|melody hits|throwback|evergreen|special hit|popular hit|'
-    r'golden hit|year wise|decade)\b',
+    r'golden hit|playlist|essentials|originals|anthems|vibes|year wise|'
+    r'decade|fresh hits|new hits|hit songs|hit collection|songs collection|'
+    r'love songs|sad songs|party hits|pop hits|hottest hits|trending hits)\b',
     re.IGNORECASE,
 )
+# Year + generic word in album = compilation (e.g. "Tollywood 2025 Hits")
+YEAR_TAGGED_RE = re.compile(r'\b(?:19|20)\d{2}\b')
+GENERIC_TERMS_RE = re.compile(
+    r'\b(hits?|songs?|telugu|tollywood|pop|romantic|dance|sad|love|fresh|'
+    r'new|special|jukebox|mix|chart|collection|best|top|popular|year)\b',
+    re.IGNORECASE,
+)
+
+
+def is_compilation(album: str) -> bool:
+    if not album:
+        return False
+    if COMPILATION_RE.search(album):
+        return True
+    if YEAR_TAGGED_RE.search(album) and GENERIC_TERMS_RE.search(album):
+        return True
+    return False
 
 
 def is_film_song(d: dict) -> bool:
@@ -296,7 +315,7 @@ def is_film_song(d: dict) -> bool:
         return False
     # Compilation albums — these mistag old songs under a recent year
     # (e.g. "Tollywood Patriotic Songs 2026" containing songs from 2003).
-    if COMPILATION_RE.search(album_lc):
+    if is_compilation(album_lc):
         return False
 
     # Positive signals — need at least one

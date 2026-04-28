@@ -67,10 +67,11 @@
     -webkit-font-feature-settings: 'liga';
   }
 
-  .app { height: 100dvh; width: 100vw; position: relative; overflow: hidden; display: grid; place-items: center; }
+  .app { height: 100dvh; width: 100vw; position: relative; overflow: hidden; }
+
+  /* ============== REEL — FULL SCREEN ============== */
   .reel {
     position: absolute; inset: 0;
-    width: 100%; max-width: 480px; height: 100%; margin: 0 auto;
     background: var(--bg-0);
     overflow: hidden;
     user-select: none;
@@ -78,173 +79,174 @@
     transition: transform var(--t-med), opacity var(--t-med);
     will-change: transform, opacity;
   }
-  .reel.swipe-up   { transform: translateY(-30px); opacity: 0.6; }
-  .reel.swipe-down { transform: translateY(30px); opacity: 0.6; }
+  .reel.swipe-up   { transform: translateY(-30px); opacity: 0.7; }
+  .reel.swipe-down { transform: translateY(30px); opacity: 0.7; }
   .reel.exit-up    { transform: translateY(-100%); opacity: 0; }
   .reel.exit-down  { transform: translateY(100%); opacity: 0; }
   .reel.enter-bottom { transform: translateY(100%); opacity: 0; }
   .reel.enter-top    { transform: translateY(-100%); opacity: 0; }
 
-  /* blurred background poster */
+  /* Blurred poster background fills the screen */
   .reel-bg {
     position: absolute; inset: 0;
     background-size: cover; background-position: center;
-    filter: blur(45px) saturate(1.4) brightness(0.55);
-    transform: scale(1.2);
+    filter: blur(60px) saturate(1.5) brightness(0.55);
+    transform: scale(1.25);
     transition: opacity var(--t-slow);
   }
-  [data-theme="light"] .reel-bg { filter: blur(45px) saturate(1.4) brightness(0.92); }
+  [data-theme="light"] .reel-bg { filter: blur(60px) saturate(1.4) brightness(0.92); }
   .reel-bg::after {
     content: "";
     position: absolute; inset: 0;
-    background: linear-gradient(180deg, rgba(0,0,0,0.45) 0%, transparent 30%, transparent 50%, rgba(0,0,0,0.7) 100%);
+    background: linear-gradient(180deg,
+      rgba(0,0,0,0.55) 0%,
+      transparent 25%,
+      transparent 55%,
+      rgba(0,0,0,0.85) 100%);
   }
   [data-theme="light"] .reel-bg::after {
-    background: linear-gradient(180deg, rgba(255,255,255,0.5) 0%, transparent 30%, transparent 50%, rgba(255,255,255,0.7) 100%);
+    background: linear-gradient(180deg,
+      rgba(255,255,255,0.5) 0%,
+      transparent 25%,
+      transparent 55%,
+      rgba(255,255,255,0.8) 100%);
   }
 
-  .reel-content {
+  /* COVER STAGE — fills whole reel, with 3D flip */
+  .cover-stage {
     position: absolute; inset: 0;
-    display: grid;
-    grid-template-rows: auto 1fr auto;
-    padding: 12px 12px;
-    padding-top: max(12px, env(safe-area-inset-top, 12px));
-    padding-bottom: max(12px, env(safe-area-inset-bottom, 12px));
-    z-index: 2;
+    perspective: 2400px;
+    cursor: pointer;
+    z-index: 1;
+  }
+  .face {
+    position: absolute; inset: 0;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    transition: transform 600ms cubic-bezier(.4,0,.2,1);
+    transform-style: preserve-3d;
+  }
+  .face.front {
+    background-size: cover;
+    background-position: center;
+    background-color: var(--bg-1);
+    transform: rotateY(0deg);
+  }
+  .face.back {
+    transform: rotateY(-180deg);
+    background: rgba(8, 5, 14, 0.97);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    overflow: hidden;
+  }
+  [data-theme="light"] .face.back { background: rgba(252, 248, 254, 0.98); }
+  .cover-stage.flipped .face.front { transform: rotateY(180deg); }
+  .cover-stage.flipped .face.back  { transform: rotateY(0deg); }
+  .face.front.spin-burst { animation: spinBurst 0.5s cubic-bezier(.5,.05,.5,.95) 1; }
+  @keyframes spinBurst {
+    0% { transform: scale(1) rotate(0); }
+    50% { transform: scale(0.97) rotate(3deg); }
+    100% { transform: scale(1) rotate(0); }
+  }
+  /* gradient overlay on front cover for legible meta */
+  .face.front::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg,
+      transparent 0%,
+      transparent 40%,
+      rgba(0,0,0,0.55) 100%);
+    pointer-events: none;
+  }
+  [data-theme="light"] .face.front::after {
+    background: linear-gradient(180deg,
+      transparent 0%,
+      transparent 40%,
+      rgba(0,0,0,0.45) 100%);
+  }
+
+  /* ============== UI OVERLAYS on top of cover ============== */
+  .ui-overlay {
+    position: absolute; inset: 0;
+    z-index: 5;
+    pointer-events: none;
+    transition: opacity var(--t-med);
+  }
+  .ui-overlay > * { pointer-events: auto; }
+  .cover-stage.flipped ~ .ui-overlay {
+    opacity: 0;
+    pointer-events: none;
   }
 
   /* TOP STRIP */
   .top-strip {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    padding: 14px 14px;
+    padding-top: max(14px, env(safe-area-inset-top, 14px));
     display: flex; align-items: center; gap: 8px;
-    min-height: 44px;
-    padding: 0 4px;
   }
   .brand {
     display: flex; align-items: center; gap: 8px;
     font-family: "Inter"; font-weight: 700;
     font-size: 13px; letter-spacing: 1.5px;
-    color: var(--fg);
-    text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+    color: #fff;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.7);
   }
   .brand-logo {
-    width: 26px; height: 26px;
+    width: 28px; height: 28px;
     display: grid; place-items: center;
-    border-radius: 7px;
+    border-radius: 8px;
     background: linear-gradient(135deg, var(--primary), var(--accent));
     color: #fff;
     box-shadow: 0 4px 12px rgba(0,0,0,0.4);
   }
-  .brand-logo .material-symbols-outlined { font-size: 14px; font-variation-settings: 'FILL' 1; }
+  .brand-logo .material-symbols-outlined { font-size: 16px; font-variation-settings: 'FILL' 1; }
   .top-strip .spacer { flex: 1; }
-
   .icon-pill {
     appearance: none; border: none;
-    width: 40px; height: 40px;
+    width: 38px; height: 38px;
     border-radius: var(--r-full);
-    background: rgba(0,0,0,0.4);
+    background: rgba(0,0,0,0.45);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    color: var(--fg);
+    color: #fff;
     display: grid; place-items: center;
     cursor: pointer;
     transition: background var(--t-fast), transform var(--t-fast);
     flex-shrink: 0;
     border: 1px solid var(--outline-2);
   }
-  [data-theme="light"] .icon-pill { background: rgba(255,255,255,0.6); }
+  [data-theme="light"] .icon-pill { background: rgba(255,255,255,0.65); color: var(--bg-0); }
   .icon-pill:hover { transform: scale(1.05); }
   .icon-pill:active { transform: scale(0.94); }
-  .icon-pill .material-symbols-outlined { font-size: 20px; }
+  .icon-pill .material-symbols-outlined { font-size: 19px; }
 
-  /* ============== STAGE: cover + actions side-by-side ============== */
-  .stage {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 14px;
-    padding: 12px 4px;
-    min-height: 0;
-  }
-  .cover-stage {
-    flex: 0 1 auto;
-    width: min(100%, 300px);
-    aspect-ratio: 1;
-    perspective: 1400px;
-    position: relative;
-    cursor: pointer;
-  }
-  .face {
-    position: absolute; inset: 0;
-    border-radius: var(--r-lg);
-    overflow: hidden;
-    backface-visibility: hidden;
-    -webkit-backface-visibility: hidden;
-    transition: transform 600ms cubic-bezier(.4,0,.2,1);
-    transform-style: preserve-3d;
-    box-shadow: 0 30px 80px -20px rgba(0,0,0,0.7), 0 12px 30px -10px rgba(0,0,0,0.5);
-  }
-  .face.front {
-    transform: rotateY(0deg);
-    background-size: cover;
-    background-position: center;
-    background-color: var(--bg-2);
-  }
-  .face.back {
-    transform: rotateY(-180deg);
-    background: rgba(10, 7, 18, 0.92);
-    backdrop-filter: blur(30px);
-    -webkit-backdrop-filter: blur(30px);
-    border: 1px solid var(--outline);
-  }
-  [data-theme="light"] .face.back { background: rgba(255, 251, 255, 0.96); }
-  .cover-stage.flipped .face.front { transform: rotateY(180deg); }
-  .cover-stage.flipped .face.back  { transform: rotateY(0deg); }
-  .face.front.spin-burst { animation: spinBurst 0.7s cubic-bezier(.5,.05,.5,.95) 1; }
-  @keyframes spinBurst {
-    0%   { transform: scale(1) rotate(0); }
-    50%  { transform: scale(0.92) rotate(8deg); }
-    100% { transform: scale(1) rotate(0); }
-  }
-
-  /* play indicator pulse — only when on front face */
-  .cover-stage::after {
-    content: "";
-    position: absolute; inset: 0;
-    border-radius: var(--r-lg);
-    box-shadow: 0 0 0 0 transparent;
-    pointer-events: none;
-    transition: box-shadow var(--t-med);
-  }
-  .surface.playing .cover-stage:not(.flipped)::after {
-    animation: coverGlow 2.6s ease-in-out infinite;
-  }
-  @keyframes coverGlow {
-    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 40%, transparent); }
-    50%      { box-shadow: 0 0 0 14px transparent; }
-  }
-
-  /* ============== ACTION COLUMN (outside the card) ============== */
+  /* ACTION COLUMN — right side, vertical */
   .actions {
-    flex: 0 0 auto;
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
     display: flex; flex-direction: column;
-    gap: 14px;
+    gap: 16px;
     align-items: center;
   }
+  .action-group { display: flex; flex-direction: column; align-items: center; gap: 3px; }
   .action {
     appearance: none; border: none;
-    width: 48px; height: 48px;
+    width: 50px; height: 50px;
     border-radius: var(--r-full);
     background: rgba(0,0,0,0.5);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    color: var(--fg);
+    color: #fff;
     display: grid; place-items: center;
     cursor: pointer;
     border: 1px solid var(--outline-2);
     transition: background var(--t-fast), transform var(--t-fast), color var(--t-fast);
-    flex-shrink: 0;
   }
-  [data-theme="light"] .action { background: rgba(255,255,255,0.8); }
+  [data-theme="light"] .action { background: rgba(255,255,255,0.85); color: var(--bg-0); }
   .action:hover { transform: scale(1.08); }
   .action:active { transform: scale(0.92); }
   .action .material-symbols-outlined { font-size: 24px; transition: color var(--t-fast); }
@@ -252,28 +254,23 @@
     color: var(--accent);
     font-variation-settings: 'FILL' 1;
     animation: heartBeat 0.65s cubic-bezier(.36,.07,.19,.97);
-    text-shadow: 0 0 16px color-mix(in srgb, var(--accent) 50%, transparent);
+    text-shadow: 0 0 16px color-mix(in srgb, var(--accent) 60%, transparent);
   }
   @keyframes heartBeat {
-    0%   { transform: scale(1); }
-    15%  { transform: scale(1.6); }
-    30%  { transform: scale(0.85); }
-    45%  { transform: scale(1.35); }
-    60%  { transform: scale(0.95); }
+    0% { transform: scale(1); }
+    15% { transform: scale(1.6); }
+    30% { transform: scale(0.85); }
+    45% { transform: scale(1.35); }
+    60% { transform: scale(0.95); }
     100% { transform: scale(1); }
   }
-  .action.toggle-on {
-    background: var(--accent);
-    border-color: transparent;
-  }
-  .action.toggle-on .material-symbols-outlined { color: #fff; font-variation-settings: 'FILL' 1; }
-  .action-group { display: flex; flex-direction: column; align-items: center; gap: 2px; }
   .action-label {
-    font-size: 9px; letter-spacing: 0.4px;
-    color: var(--fg-2);
-    text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+    font-size: 10px; letter-spacing: 0.4px;
+    color: #fff;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
     font-weight: 600;
   }
+  [data-theme="light"] .action-label { color: var(--bg-0); text-shadow: 0 1px 3px rgba(255,255,255,0.7); }
 
   .heart-burst {
     position: fixed;
@@ -284,12 +281,156 @@
     font-variation-settings: 'FILL' 1;
   }
   @keyframes heartFly {
-    0%   { transform: translate(0,0) scale(.4); opacity: 0; }
-    20%  { opacity: 1; }
+    0% { transform: translate(0,0) scale(.4); opacity: 0; }
+    20% { opacity: 1; }
     100% { transform: translate(var(--dx, 20px), -120px) scale(1.4); opacity: 0; }
   }
 
-  /* ============== BACK CONTENT (lyrics or search) ============== */
+  /* META OVERLAY (bottom-left of cover) */
+  .meta-overlay {
+    position: absolute;
+    left: 16px;
+    right: 90px;     /* leave space for action column */
+    bottom: 90px;    /* above era chips + progress */
+    bottom: max(90px, calc(env(safe-area-inset-bottom, 12px) + 78px));
+    color: #fff;
+    transition: filter var(--t-med), opacity var(--t-med);
+  }
+  [data-theme="light"] .meta-overlay { color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+  .meta-overlay.revealing { filter: blur(8px); opacity: 0.2; }
+  .meta-movie {
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 1.6px; text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 6px;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.8);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .meta-title {
+    font-family: "DM Serif Display"; font-style: italic;
+    font-size: 28px; line-height: 1.1;
+    margin: 0 0 6px;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.9);
+    word-break: break-word;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .meta-artist {
+    font-size: 12px;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    opacity: 0.9;
+  }
+
+  /* PROGRESS — thin line at very bottom */
+  .progress-strip {
+    position: absolute;
+    left: 16px; right: 16px;
+    bottom: 56px;
+    bottom: max(56px, calc(env(safe-area-inset-bottom, 12px) + 44px));
+  }
+  .progress {
+    position: relative;
+    height: 3px;
+    background: rgba(255,255,255,0.2);
+    border-radius: var(--r-full);
+    cursor: pointer;
+    transition: height var(--t-fast);
+  }
+  [data-theme="light"] .progress { background: rgba(0,0,0,0.18); }
+  .progress:hover { height: 5px; }
+  .progress .filled {
+    position: absolute; inset: 0 auto 0 0;
+    width: 0%;
+    background: #fff;
+    border-radius: var(--r-full);
+  }
+  [data-theme="light"] .progress .filled { background: var(--bg-0); }
+  .progress .thumb {
+    position: absolute; top: 50%; left: 0;
+    width: 11px; height: 11px;
+    background: #fff;
+    border-radius: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    transition: transform var(--t-fast);
+  }
+  .progress:hover .thumb { transform: translate(-50%, -50%) scale(1); }
+  .times {
+    display: flex; justify-content: space-between;
+    font-size: 9px;
+    font-variant-numeric: tabular-nums;
+    color: rgba(255,255,255,0.85);
+    margin-top: 4px;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+  }
+  [data-theme="light"] .times { color: rgba(0,0,0,0.85); text-shadow: none; }
+
+  /* ERA CHIPS — bottom strip */
+  .era-row {
+    position: absolute;
+    left: 0; right: 0;
+    bottom: 8px;
+    bottom: max(8px, env(safe-area-inset-bottom, 8px));
+    display: flex; gap: 5px;
+    padding: 6px 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .era-row::-webkit-scrollbar { display: none; }
+  .chip {
+    appearance: none;
+    border: 1px solid var(--outline);
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(16px);
+    color: #fff;
+    border-radius: var(--r-full);
+    padding: 6px 12px;
+    font-size: 11px; font-weight: 600;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--t-fast), color var(--t-fast), transform var(--t-fast);
+  }
+  [data-theme="light"] .chip { background: rgba(255,255,255,0.7); color: var(--bg-0); }
+  .chip:hover { transform: scale(1.04); }
+  .chip:active { transform: scale(0.96); }
+  .chip[aria-pressed="true"] {
+    background: #fff;
+    color: var(--bg-0);
+    border-color: transparent;
+    font-weight: 700;
+  }
+  [data-theme="light"] .chip[aria-pressed="true"] { background: var(--bg-0); color: #fff; }
+
+  /* tap-to-play indicator on cover */
+  .play-indicator {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(20px);
+    display: grid; place-items: center;
+    color: #fff;
+    pointer-events: none;
+    transition: transform 250ms cubic-bezier(.4,0,.2,1), opacity 250ms;
+    z-index: 6;
+    opacity: 0;
+  }
+  .play-indicator.show {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  .play-indicator.hide {
+    transform: translate(-50%, -50%) scale(1.4);
+    opacity: 0;
+  }
+  .play-indicator .material-symbols-outlined { font-size: 40px; font-variation-settings: 'FILL' 1; }
+
+  /* ============== BACK PANE — full screen lyrics or search ============== */
   .back-pane {
     position: absolute; inset: 0;
     display: none;
@@ -298,53 +439,65 @@
     color: var(--fg);
   }
   .back-pane.show { display: flex; }
-  /* LYRICS PANE */
-  .pane-lyrics-header {
+  .pane-header {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 10px 14px;
+    padding: 14px 16px;
+    padding-top: max(14px, env(safe-area-inset-top, 14px));
     border-bottom: 1px solid var(--outline);
     flex-shrink: 0;
+    gap: 10px;
   }
-  .pane-lyrics-title {
-    font-family: "DM Serif Display"; font-style: italic;
-    font-size: 13px;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  .pane-title {
     flex: 1; min-width: 0;
+    overflow: hidden;
+  }
+  .pane-title .name {
+    font-family: "DM Serif Display"; font-style: italic;
+    font-size: 15px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     color: var(--fg);
   }
-  .pane-lyrics-body {
+  .pane-title .sub {
+    font-size: 9px; letter-spacing: 1.4px; text-transform: uppercase;
+    color: var(--gold);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    margin-bottom: 2px;
+  }
+  .pane-body {
     flex: 1; min-height: 0;
     position: relative;
     overflow: hidden;
   }
-  .pane-lyrics-body::before, .pane-lyrics-body::after {
+
+  /* LYRICS PANE */
+  .pane-body.lyrics-body::before, .pane-body.lyrics-body::after {
     content: ""; position: absolute; left: 0; right: 0;
-    height: 30px; pointer-events: none; z-index: 2;
+    height: 50px; pointer-events: none; z-index: 2;
   }
-  .pane-lyrics-body::before {
-    top: 0; background: linear-gradient(180deg, rgba(10,7,18,1) 0%, transparent 100%);
+  .pane-body.lyrics-body::before {
+    top: 0; background: linear-gradient(180deg, rgba(8,5,14,1) 0%, transparent 100%);
   }
-  .pane-lyrics-body::after {
-    bottom: 0; background: linear-gradient(0deg, rgba(10,7,18,1) 0%, transparent 100%);
+  .pane-body.lyrics-body::after {
+    bottom: 0; background: linear-gradient(0deg, rgba(8,5,14,1) 0%, transparent 100%);
   }
-  [data-theme="light"] .pane-lyrics-body::before {
-    background: linear-gradient(180deg, rgba(255,251,255,1) 0%, transparent 100%);
+  [data-theme="light"] .pane-body.lyrics-body::before {
+    background: linear-gradient(180deg, rgba(252,248,254,1) 0%, transparent 100%);
   }
-  [data-theme="light"] .pane-lyrics-body::after {
-    background: linear-gradient(0deg, rgba(255,251,255,1) 0%, transparent 100%);
+  [data-theme="light"] .pane-body.lyrics-body::after {
+    background: linear-gradient(0deg, rgba(252,248,254,1) 0%, transparent 100%);
   }
   .lyrics-track {
     display: flex; flex-direction: column; align-items: center;
     will-change: transform;
     transition: transform 380ms cubic-bezier(.4,0,.2,1);
-    padding: 50% 12px;
+    padding: 50% 24px;
     text-align: center;
   }
   .lyrics-line {
     font-family: "DM Serif Display"; font-style: italic;
-    font-size: 13px;
-    line-height: 1.4;
-    margin: 4px 0;
+    font-size: 16px;
+    line-height: 1.5;
+    margin: 8px 0;
     color: var(--fg-3);
     transition: color var(--t-med), font-size var(--t-med), opacity var(--t-med);
     max-width: 100%; word-wrap: break-word;
@@ -352,15 +505,15 @@
   }
   .lyrics-line.active {
     color: var(--fg);
-    font-size: 17px;
+    font-size: 26px;
     font-weight: 600;
     opacity: 1;
-    text-shadow: 0 0 14px color-mix(in srgb, var(--primary) 60%, transparent);
+    text-shadow: 0 0 20px color-mix(in srgb, var(--primary) 60%, transparent);
   }
   .lyrics-line.near {
     color: var(--fg-2);
-    font-size: 14px;
-    opacity: 0.8;
+    font-size: 19px;
+    opacity: 0.85;
   }
   .lyrics-state {
     position: absolute; inset: 0;
@@ -369,14 +522,14 @@
   }
   .lyrics-state.hidden { display: none; }
   .lyrics-state .material-symbols-outlined {
-    font-size: 28px; color: var(--fg-3);
-    margin-bottom: 6px;
+    font-size: 36px; color: var(--fg-3);
+    margin-bottom: 10px;
   }
-  .lyrics-state .label { font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--fg-2); margin-bottom: 4px; }
-  .lyrics-state .sub { font-family: "DM Serif Display"; font-style: italic; font-size: 14px; color: var(--fg); }
-  .lyrics-loading { display: flex; gap: 5px; justify-content: center; margin-top: 10px; }
+  .lyrics-state .label { font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--fg-2); margin-bottom: 4px; }
+  .lyrics-state .sub { font-family: "DM Serif Display"; font-style: italic; font-size: 18px; color: var(--fg); }
+  .lyrics-loading { display: flex; gap: 6px; justify-content: center; margin-top: 14px; }
   .lyrics-loading span {
-    width: 6px; height: 6px; border-radius: 50%;
+    width: 8px; height: 8px; border-radius: 50%;
     background: var(--fg-3);
     animation: dotPulse 1.2s infinite ease-in-out;
   }
@@ -387,47 +540,48 @@
     50% { opacity: 1; transform: scale(1.4); }
   }
   .lyrics-badge {
-    font-size: 8px; letter-spacing: 0.5px;
+    font-size: 9px; letter-spacing: 0.5px;
     text-transform: uppercase;
     background: var(--accent);
     color: #fff;
-    padding: 2px 6px;
+    padding: 3px 8px;
     border-radius: var(--r-full);
     font-weight: 700;
-    margin-top: 4px;
+    margin-top: 8px;
     display: inline-block;
   }
 
   /* SEARCH PANE */
-  .pane-search-header {
-    display: flex; align-items: center;
-    padding: 8px 12px;
+  .pane-body.search-body { display: flex; flex-direction: column; }
+  .search-input-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 16px;
+    background: rgba(255,255,255,0.04);
     border-bottom: 1px solid var(--outline);
-    flex-shrink: 0;
-    gap: 6px;
   }
-  .pane-search-input {
+  [data-theme="light"] .search-input-row { background: rgba(0,0,0,0.04); }
+  .search-input-row .material-symbols-outlined { font-size: 18px; color: var(--fg-3); }
+  .search-input {
     flex: 1; min-width: 0;
     appearance: none; border: none; outline: none;
     background: transparent;
     color: var(--fg);
-    font-size: 13px;
-    height: 34px;
-    padding: 0 6px;
+    font-size: 15px;
+    height: 36px;
   }
-  .pane-search-input::placeholder { color: var(--fg-3); }
-  .pane-search-results {
+  .search-input::placeholder { color: var(--fg-3); }
+  .search-results {
     flex: 1; overflow-y: auto;
-    padding: 4px 0;
+    padding: 6px 0;
   }
-  .pane-search-results::-webkit-scrollbar { width: 4px; }
-  .pane-search-results::-webkit-scrollbar-thumb { background: var(--outline); border-radius: 2px; }
+  .search-results::-webkit-scrollbar { width: 4px; }
+  .search-results::-webkit-scrollbar-thumb { background: var(--outline); border-radius: 2px; }
   .search-result {
     display: grid;
-    grid-template-columns: 36px 1fr;
-    gap: 10px;
+    grid-template-columns: 44px 1fr;
+    gap: 12px;
     align-items: center;
-    padding: 6px 12px;
+    padding: 8px 16px;
     cursor: pointer;
     border: none;
     background: transparent;
@@ -435,174 +589,44 @@
     width: 100%;
     text-align: left;
     transition: background var(--t-fast);
-    min-width: 0;
   }
   .search-result:hover { background: rgba(255,255,255,0.06); }
-  [data-theme="light"] .search-result:hover { background: rgba(0,0,0,0.05); }
+  [data-theme="light"] .search-result:hover { background: rgba(0,0,0,0.04); }
   .search-result-cover {
-    width: 36px; height: 36px;
-    border-radius: 6px;
+    width: 44px; height: 44px;
+    border-radius: 7px;
     background: var(--bg-2);
     background-size: cover; background-position: center;
     flex-shrink: 0;
   }
   .search-result-info { min-width: 0; }
-  .search-result-title { font-size: 11px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .search-result-sub { font-size: 9px; color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .search-empty, .search-loading-msg {
-    padding: 24px 16px;
-    text-align: center;
-    color: var(--fg-2);
-    font-size: 11px;
-  }
+  .search-result-title { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .search-result-sub { font-size: 11px; color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .search-empty, .search-loading-msg { padding: 28px 16px; text-align: center; color: var(--fg-2); font-size: 12px; }
 
-  /* ============== BOTTOM BAR ============== */
-  .bottom { display: flex; flex-direction: column; gap: 8px; padding: 8px 4px 0; }
-  .meta-block {
-    text-align: center;
-    transition: filter var(--t-med), opacity var(--t-med);
-    min-width: 0;
-    padding: 0 12px;
-  }
-  .meta-block.revealing { filter: blur(8px); opacity: 0.2; }
-  .meta-movie {
-    font-size: 10px; font-weight: 700;
-    letter-spacing: 1.6px; text-transform: uppercase;
-    color: var(--gold);
-    margin-bottom: 4px;
-    text-shadow: 0 1px 3px rgba(0,0,0,0.6);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-  .meta-title {
-    font-family: "DM Serif Display"; font-style: italic;
-    font-size: 22px; line-height: 1.15;
-    margin: 0 0 3px;
-    text-shadow: 0 2px 8px rgba(0,0,0,0.7);
-    word-break: break-word;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-  .meta-artist {
-    font-size: 11px; color: var(--fg-2);
-    text-shadow: 0 1px 3px rgba(0,0,0,0.6);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-
-  .player-row { padding: 0 8px; }
-  .progress {
-    position: relative;
-    height: 3px;
-    background: rgba(255,255,255,0.15);
-    border-radius: var(--r-full);
-    cursor: pointer;
-    margin-bottom: 6px;
-    transition: height var(--t-fast);
-  }
-  [data-theme="light"] .progress { background: rgba(0,0,0,0.15); }
-  .progress:hover { height: 5px; }
-  .progress .filled {
-    position: absolute; inset: 0 auto 0 0;
-    width: 0%;
-    background: var(--fg);
-    border-radius: var(--r-full);
-  }
-  .progress .thumb {
-    position: absolute; top: 50%; left: 0;
-    width: 11px; height: 11px;
-    background: var(--fg);
-    border-radius: 50%;
-    transform: translate(-50%, -50%) scale(0);
-    transition: transform var(--t-fast);
-  }
-  .progress:hover .thumb { transform: translate(-50%, -50%) scale(1); }
-  .times {
-    display: flex; justify-content: space-between;
-    font-variant-numeric: tabular-nums;
-    font-size: 9px; color: var(--fg-2);
-    margin-bottom: 6px;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.6);
-  }
-  .play-controls {
-    display: flex; align-items: center; justify-content: center; gap: 12px;
-    margin-bottom: 8px;
-  }
-  .pc {
-    appearance: none; border: none;
-    width: 40px; height: 40px;
-    border-radius: var(--r-full);
-    background: rgba(0,0,0,0.45);
-    color: var(--fg);
-    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-    border: 1px solid var(--outline-2);
-    display: grid; place-items: center;
-    cursor: pointer;
-    transition: background var(--t-fast), transform var(--t-fast);
-  }
-  [data-theme="light"] .pc { background: rgba(255,255,255,0.6); }
-  .pc:hover { transform: scale(1.08); }
-  .pc:active { transform: scale(0.92); }
-  .pc .material-symbols-outlined { font-size: 20px; }
-  .pc.play {
-    width: 54px; height: 54px;
-    background: var(--fg);
-    color: var(--bg-0);
-    border-color: transparent;
-  }
-  .pc.play .material-symbols-outlined { font-size: 28px; font-variation-settings: 'FILL' 1; }
-  .pc.shuffle.spin .material-symbols-outlined { animation: spinAround .7s cubic-bezier(.5,.05,.5,.95) 1; }
-  @keyframes spinAround { from { transform: rotate(0); } to { transform: rotate(360deg); } }
-
-  .era-row {
-    display: flex; gap: 5px;
-    padding: 2px 4px;
-    justify-content: center;
-    flex-wrap: wrap;
-  }
-  .chip {
-    appearance: none;
-    border: 1px solid var(--outline);
-    background: rgba(0,0,0,0.4);
-    backdrop-filter: blur(12px);
-    color: var(--fg-2);
-    border-radius: var(--r-full);
-    padding: 5px 11px;
-    font-size: 10px; font-weight: 600;
-    letter-spacing: 0.3px;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: background var(--t-fast), color var(--t-fast), transform var(--t-fast);
-  }
-  [data-theme="light"] .chip { background: rgba(255,255,255,0.5); }
-  .chip:hover { color: var(--fg); }
-  .chip:active { transform: scale(0.96); }
-  .chip[aria-pressed="true"] {
-    background: var(--fg);
-    color: var(--bg-0);
-    border-color: transparent;
-    font-weight: 700;
-  }
-
+  /* swipe hint pill */
   .swipe-hint {
     position: absolute;
-    top: 64px; left: 50%;
+    top: 70px; left: 50%;
     transform: translateX(-50%);
     background: rgba(0,0,0,0.5);
-    color: var(--fg);
-    padding: 5px 12px;
+    color: #fff;
+    padding: 6px 12px;
     border-radius: var(--r-full);
-    font-size: 10px; font-weight: 500;
+    font-size: 11px; font-weight: 500;
     backdrop-filter: blur(12px);
-    z-index: 5; opacity: 0;
+    z-index: 7; opacity: 0;
     transition: opacity var(--t-med);
     pointer-events: none;
   }
   [data-theme="light"] .swipe-hint { background: rgba(255,255,255,0.7); color: var(--bg-0); }
   .swipe-hint.show { opacity: 1; }
 
+  /* toast */
   .toast {
     position: absolute;
-    bottom: 70px; left: 50%;
-    transform: translate(-50%, 130%);
+    top: 90px; left: 50%;
+    transform: translate(-50%, -130%);
     background: rgba(0,0,0,0.85);
     color: #fff;
     border-radius: var(--r-md);
@@ -618,6 +642,7 @@
   [data-theme="light"] .toast { background: rgba(255,255,255,0.95); color: var(--bg-0); }
   .toast.show { transform: translate(-50%, 0); opacity: 1; }
 
+  /* boot */
   .booting {
     position: fixed; inset: 0;
     display: grid; place-items: center;
@@ -642,10 +667,15 @@
     *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   }
 
-  @media (max-width: 380px) {
-    .cover-stage { width: min(100%, 240px); }
-    .actions { gap: 12px; }
-    .action { width: 44px; height: 44px; }
+  /* On wide screens, pin to a phone-shaped column for desktop */
+  @media (min-width: 700px) {
+    .reel { max-width: 460px; left: 50%; transform: translateX(-50%); }
+    .reel.swipe-up   { transform: translateX(-50%) translateY(-30px); opacity: 0.7; }
+    .reel.swipe-down { transform: translateX(-50%) translateY(30px); opacity: 0.7; }
+    .reel.exit-up    { transform: translateX(-50%) translateY(-100%); opacity: 0; }
+    .reel.exit-down  { transform: translateX(-50%) translateY(100%); opacity: 0; }
+    .reel.enter-bottom { transform: translateX(-50%) translateY(100%); opacity: 0; }
+    .reel.enter-top    { transform: translateX(-50%) translateY(-100%); opacity: 0; }
   }
 </style>
 </head>
@@ -654,7 +684,62 @@
 <div class="app">
   <div class="reel" id="reel">
     <div class="reel-bg" id="reel-bg"></div>
-    <div class="reel-content surface" id="surface">
+
+    <!-- COVER STAGE — fills full reel, with flip -->
+    <div class="cover-stage" id="cover-stage">
+      <div class="face front" id="cover">
+        <div class="play-indicator" id="play-indicator">
+          <span class="material-symbols-outlined" id="play-indicator-icon">play_arrow</span>
+        </div>
+      </div>
+      <div class="face back" id="back-face">
+        <!-- LYRICS pane -->
+        <div class="back-pane pane-lyrics" id="pane-lyrics">
+          <div class="pane-header">
+            <div class="pane-title">
+              <div class="sub" id="pane-lyrics-sub">Lyrics</div>
+              <div class="name" id="pane-lyrics-title">—</div>
+            </div>
+            <button class="icon-pill" id="btn-flip-back-lyrics" type="button" aria-label="Back to cover">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+          <div class="pane-body lyrics-body" id="lyrics-body">
+            <div class="lyrics-track" id="lyrics-track"></div>
+            <div class="lyrics-state" id="lyrics-state">
+              <div>
+                <span class="material-symbols-outlined" id="lyrics-state-icon">lyrics</span>
+                <div class="label" id="lyrics-state-label">Lyrics</div>
+                <div class="sub" id="lyrics-state-text">Tap to load</div>
+                <div class="lyrics-loading" id="lyrics-loading" hidden><span></span><span></span><span></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- SEARCH pane -->
+        <div class="back-pane pane-search" id="pane-search">
+          <div class="pane-header">
+            <div class="pane-title">
+              <div class="sub">Search</div>
+              <div class="name">Find any Telugu song</div>
+            </div>
+            <button class="icon-pill" id="btn-flip-back-search" type="button" aria-label="Back to cover">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+          <div class="pane-body search-body">
+            <div class="search-input-row">
+              <span class="material-symbols-outlined">search</span>
+              <input id="search-input" class="search-input" type="search" autocomplete="off" placeholder="Song, movie, artist…" aria-label="Search" />
+            </div>
+            <div class="search-results" id="search-results"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- UI OVERLAY (top + actions + meta + progress + era) -->
+    <div class="ui-overlay">
 
       <!-- TOP STRIP -->
       <div class="top-strip">
@@ -665,124 +750,68 @@
           <span>YADRCHA</span>
         </div>
         <div class="spacer"></div>
+        <button class="icon-pill" id="btn-search" type="button" aria-label="Search">
+          <span class="material-symbols-outlined">search</span>
+        </button>
         <button class="icon-pill" id="btn-theme" type="button" aria-label="Toggle theme">
           <span class="material-symbols-outlined" id="btn-theme-icon">dark_mode</span>
         </button>
       </div>
 
-      <!-- STAGE: cover (with flip) + action column -->
-      <div class="stage">
-        <div class="cover-stage" id="cover-stage">
-          <!-- FRONT: cover image -->
-          <div class="face front" id="cover"></div>
-          <!-- BACK: lyrics or search (swap by class) -->
-          <div class="face back" id="back-face">
-            <!-- Lyrics pane -->
-            <div class="back-pane pane-lyrics" id="pane-lyrics">
-              <div class="pane-lyrics-header">
-                <div class="pane-lyrics-title" id="pane-lyrics-title">Lyrics</div>
-                <button class="icon-pill" id="btn-flip-back" type="button" aria-label="Back to cover" style="width:30px;height:30px">
-                  <span class="material-symbols-outlined" style="font-size:16px">close</span>
-                </button>
-              </div>
-              <div class="pane-lyrics-body">
-                <div class="lyrics-track" id="lyrics-track"></div>
-                <div class="lyrics-state" id="lyrics-state">
-                  <div>
-                    <span class="material-symbols-outlined" id="lyrics-state-icon">lyrics</span>
-                    <div class="label" id="lyrics-state-label">Lyrics</div>
-                    <div class="sub" id="lyrics-state-text">Tap to load</div>
-                    <div class="lyrics-loading" id="lyrics-loading" hidden><span></span><span></span><span></span></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <!-- Search pane -->
-            <div class="back-pane pane-search" id="pane-search">
-              <div class="pane-search-header">
-                <span class="material-symbols-outlined" style="font-size:18px;color:var(--fg-2);margin-left:4px">search</span>
-                <input id="search-input" class="pane-search-input" type="search" autocomplete="off" placeholder="Search…" aria-label="Search" />
-                <button class="icon-pill" id="btn-flip-back-2" type="button" aria-label="Back to cover" style="width:30px;height:30px">
-                  <span class="material-symbols-outlined" style="font-size:16px">close</span>
-                </button>
-              </div>
-              <div class="pane-search-results" id="search-results"></div>
-            </div>
-          </div>
+      <!-- ACTIONS — right side -->
+      <div class="actions">
+        <div class="action-group">
+          <button class="action" id="btn-like" type="button" aria-label="Like" aria-pressed="false">
+            <span class="material-symbols-outlined">favorite</span>
+          </button>
+          <span class="action-label">Like</span>
         </div>
-
-        <!-- ACTION COLUMN — outside the card -->
-        <div class="actions">
-          <div class="action-group">
-            <button class="action" id="btn-like" type="button" aria-label="Like" aria-pressed="false">
-              <span class="material-symbols-outlined">favorite</span>
-            </button>
-            <span class="action-label">Like</span>
-          </div>
-          <div class="action-group">
-            <button class="action" id="btn-lyrics" type="button" aria-label="Show lyrics" aria-pressed="false">
-              <span class="material-symbols-outlined">lyrics</span>
-            </button>
-            <span class="action-label">Lyrics</span>
-          </div>
-          <div class="action-group">
-            <button class="action" id="btn-search" type="button" aria-label="Search" aria-pressed="false">
-              <span class="material-symbols-outlined">search</span>
-            </button>
-            <span class="action-label">Search</span>
-          </div>
-          <div class="action-group">
-            <button class="action" id="btn-mystery" type="button" aria-label="Mystery">
-              <span class="material-symbols-outlined">help</span>
-            </button>
-            <span class="action-label">Surprise</span>
-          </div>
+        <div class="action-group">
+          <button class="action" id="btn-lyrics" type="button" aria-label="Show lyrics">
+            <span class="material-symbols-outlined">lyrics</span>
+          </button>
+          <span class="action-label">Lyrics</span>
+        </div>
+        <div class="action-group">
+          <button class="action" id="btn-mystery" type="button" aria-label="Mystery">
+            <span class="material-symbols-outlined">help</span>
+          </button>
+          <span class="action-label">Surprise</span>
         </div>
       </div>
 
-      <!-- BOTTOM -->
-      <div class="bottom">
-        <div class="meta-block" id="meta">
-          <div class="meta-movie" id="meta-movie">— Telugu film —</div>
-          <h1 class="meta-title" id="meta-title">Random Telugu hits</h1>
-          <div class="meta-artist" id="meta-artist">Press shuffle to begin</div>
+      <!-- META OVERLAY (bottom-left) -->
+      <div class="meta-overlay" id="meta">
+        <div class="meta-movie" id="meta-movie">— Telugu film —</div>
+        <h1 class="meta-title" id="meta-title">Random Telugu hits</h1>
+        <div class="meta-artist" id="meta-artist">Press anywhere to begin</div>
+      </div>
+
+      <!-- PROGRESS BAR (bottom) -->
+      <div class="progress-strip">
+        <div class="progress" id="progress" role="slider" tabindex="0" aria-label="Track position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="filled" id="filled"></div>
+          <div class="thumb" id="thumb"></div>
         </div>
-        <div class="player-row">
-          <div class="progress" id="progress" role="slider" tabindex="0" aria-label="Track position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-            <div class="filled" id="filled"></div>
-            <div class="thumb" id="thumb"></div>
-          </div>
-          <div class="times">
-            <span id="time-cur">0:00</span>
-            <span id="time-tot">0:00</span>
-          </div>
-          <div class="play-controls">
-            <button class="pc" id="btn-prev" type="button" aria-label="Previous">
-              <span class="material-symbols-outlined">skip_previous</span>
-            </button>
-            <button class="pc play" id="btn-play" type="button" aria-label="Play / pause">
-              <span class="material-symbols-outlined" id="btn-play-icon">play_arrow</span>
-            </button>
-            <button class="pc" id="btn-next" type="button" aria-label="Next">
-              <span class="material-symbols-outlined">skip_next</span>
-            </button>
-            <button class="pc shuffle" id="shuffle-mega" type="button" aria-label="Shuffle">
-              <span class="material-symbols-outlined">shuffle</span>
-            </button>
-          </div>
-        </div>
-        <div class="era-row" role="group" aria-label="Era filter">
-          <button class="chip" data-era="all" aria-pressed="true" type="button">All</button>
-          <button class="chip" data-era="vintage" aria-pressed="false" type="button">Vintage</button>
-          <button class="chip" data-era="90s" aria-pressed="false" type="button">90s</button>
-          <button class="chip" data-era="2000s" aria-pressed="false" type="button">2000s</button>
-          <button class="chip" data-era="latest" aria-pressed="false" type="button">Latest</button>
+        <div class="times">
+          <span id="time-cur">0:00</span>
+          <span id="time-tot">0:00</span>
         </div>
       </div>
 
-      <div class="swipe-hint" id="swipe-hint">↕ Swipe to change song</div>
-      <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    </div>
+      <!-- ERA CHIPS (very bottom) -->
+      <div class="era-row" role="group" aria-label="Era filter">
+        <button class="chip" data-era="all" aria-pressed="true" type="button">All</button>
+        <button class="chip" data-era="vintage" aria-pressed="false" type="button">Vintage</button>
+        <button class="chip" data-era="90s" aria-pressed="false" type="button">90s</button>
+        <button class="chip" data-era="2000s" aria-pressed="false" type="button">2000s</button>
+        <button class="chip" data-era="latest" aria-pressed="false" type="button">Latest</button>
+      </div>
+
+    </div><!-- /ui-overlay -->
+
+    <div class="swipe-hint" id="swipe-hint">↕ Swipe to change · Tap to play/pause</div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </div>
 </div>
 
@@ -815,9 +844,20 @@
   const AI_LIKES_THRESHOLD = 5;
   const AI_TIMEOUT_MS = 800;
   const AI_CANDIDATE_COUNT = 20;
+  const QUEUE_SIZE = 4;
 
-  const COMPILATION_RE = /\b(collection|best of|hits of|songs of|compilation|jukebox|patriotic|all time|chartbusters|top hits|favorites|romantic hits|dance hits|super hits|melody hits|throwback|evergreen|special hit|popular hit|golden hit)\b/i;
-  function isCompilation(movie) { return COMPILATION_RE.test(movie || ''); }
+  // STRICT compilation filter — catches "Best of 2025", "Tollywood Hits 2026", etc.
+  const COMPILATION_RE = /\b(collection|best of|hits of|songs of|compilation|jukebox|patriotic|all time|chartbusters|top hits|top songs|favorites|romantic hits|dance hits|super hits|melody hits|throwback|evergreen|special hit|popular hit|golden hit|playlist|essentials|originals|anthems|vibes|year wise|decade|fresh hits|new hits|hit songs|hit collection|songs collection|love songs|sad songs|party hits|pop hits|hottest hits|trending hits)\b/i;
+  const YEAR_TAGGED_RE = /\b(?:19|20)\d{2}\b/;
+  const GENERIC_TERMS = /\b(hits?|songs?|telugu|tollywood|pop|romantic|dance|sad|love|fresh|new|special|jukebox|mix|chart|collection|best|top|popular|year)\b/i;
+
+  function isCompilation(movie) {
+    const m = movie || '';
+    if (COMPILATION_RE.test(m)) return true;
+    // movie name has a year + generic word = compilation (e.g. "Tollywood 2025 Hits")
+    if (YEAR_TAGGED_RE.test(m) && GENERIC_TERMS.test(m)) return true;
+    return false;
+  }
 
   /* THEME */
   function detectInitialTheme() {
@@ -841,15 +881,12 @@
     isMystery: false,
     likes: new Set(JSON.parse(localStorage.getItem('yadrcha.likes') || '[]')),
     theme: detectInitialTheme(),
-    cardMode: 'front',  // 'front' | 'lyrics' | 'search'
+    cardMode: 'front',
+    queue: [],
   };
   const lyricsState = {
-    lines: null,
-    activeIdx: -1,
-    forSongId: null,
-    abort: null,
-    isTranslated: false,
-    fetchedSongId: null,
+    lines: null, activeIdx: -1, forSongId: null,
+    abort: null, isTranslated: false, fetchedSongId: null,
   };
 
   function pushHistory(id) {
@@ -903,8 +940,7 @@
     return slim.map((s) => ({
       id: s.i, title: s.t, artist: s.a, movie: s.m,
       url: s.u, cover: s.c, year: s.y, duration: s.d,
-      plays: s.p || 0,
-      era: pickEra(s.y),
+      plays: s.p || 0, era: pickEra(s.y),
     }));
   }
   function saveCache(slim) {
@@ -917,21 +953,18 @@
     }
   }
 
-  /* POOL & POPULARITY-WEIGHTED RANDOM */
+  /* POOL */
   function pool() {
     if (state.era === 'all') return state.catalog;
     if (state.era === 'latest') {
+      // STRICT: year ≥ LATEST_FROM_YEAR AND not a compilation
       return state.catalog.filter((s) => s.year && s.year >= LATEST_FROM_YEAR && !isCompilation(s.movie));
     }
     return state.catalog.filter((s) => s.era === state.era);
   }
-  // Weighted random — songs with more plays come up more often, but not
-  // always. Power 0.35 keeps a little variety; pure 1.0 would make obscure
-  // songs almost never play.
   function weightedSample(items, n) {
     if (!items.length) return [];
-    const out = [];
-    const used = new Set();
+    const out = []; const used = new Set();
     const weights = items.map((s) => Math.pow((s.plays || 1) + 1, 0.35));
     const totalWeight = weights.reduce((a, b) => a + b, 0);
     let attempts = 0;
@@ -946,21 +979,12 @@
         }
       }
     }
-    // fill up if still short
     if (out.length < Math.min(n, items.length)) {
       for (let i = 0; i < items.length && out.length < n; i++) {
         if (!used.has(i)) { used.add(i); out.push(items[i]); }
       }
     }
     return out;
-  }
-  function pickRandom() {
-    const p = pool();
-    if (!p.length) return null;
-    const recent = new Set(state.history.slice(-Math.min(p.length - 1, 30)));
-    const fresh = p.filter((s) => !recent.has(s.id) && (!state.current || s.id !== state.current.id));
-    const choices = fresh.length ? fresh : p;
-    return weightedSample(choices, 1)[0];
   }
 
   /* AI / HEURISTIC */
@@ -987,12 +1011,14 @@
       topEra: eras[0] || 'all',
     };
   }
-  function sampleCandidates(n) {
+  function sampleCandidates(n, excludeIds) {
     const p = pool();
     if (!p.length) return [];
     const recent = new Set(state.history.slice(-30));
-    const curId = state.current?.id;
-    const fresh = p.filter((s) => !recent.has(s.id) && s.id !== curId);
+    const ex = new Set(excludeIds || []);
+    if (state.current) ex.add(state.current.id);
+    state.queue.forEach(s => ex.add(s.id));
+    const fresh = p.filter((s) => !recent.has(s.id) && !ex.has(s.id));
     return weightedSample(fresh.length ? fresh : p, n);
   }
   function heuristicPick(candidates) {
@@ -1042,28 +1068,45 @@
       return candidates.find((c) => c.id === data.id) || null;
     } catch (_) { clearTimeout(timer); return null; }
   }
-  let nextPickCache = null;
-  async function prefetchNext() {
-    const cands = sampleCandidates(AI_CANDIDATE_COUNT);
-    if (!cands.length) { nextPickCache = null; return; }
-    const taste = buildTaste();
-    if (!taste || taste.likedCount < AI_LIKES_THRESHOLD) {
-      nextPickCache = cands[0]; // already weighted
-      return;
-    }
-    const ai = await aiPick(cands);
-    nextPickCache = ai || heuristicPick(cands);
-    // Background pre-fetch lyrics for the next pick
-    if (nextPickCache) prefetchLyricsBackground(nextPickCache);
-  }
-  function pickNext() {
-    if (nextPickCache) { const p = nextPickCache; nextPickCache = null; return p; }
+
+  /* ============== QUEUE / BUFFER SYSTEM ==============
+     Maintains a rolling buffer of N pre-loaded songs. Each queue item
+     has metadata (always), audio URL (always for catalog songs), and
+     pre-fetched lyrics in localStorage cache. When user swipes next,
+     pop the head — it plays instantly, lyrics already cached. */
+  let queueRefilling = false;
+  async function pickOneForQueue() {
     const cands = sampleCandidates(AI_CANDIDATE_COUNT);
     if (!cands.length) return null;
     const taste = buildTaste();
     if (!taste || taste.likedCount < AI_LIKES_THRESHOLD) return cands[0];
-    return heuristicPick(cands);
+    const ai = await aiPick(cands);
+    return ai || heuristicPick(cands);
   }
+  async function refillQueue() {
+    if (queueRefilling) return;
+    queueRefilling = true;
+    try {
+      while (state.queue.length < QUEUE_SIZE) {
+        const pick = await pickOneForQueue();
+        if (!pick) break;
+        if (state.queue.find((s) => s.id === pick.id)) {
+          // duplicate guard — try one more sample
+          const alt = sampleCandidates(AI_CANDIDATE_COUNT).find(
+            (c) => c.id !== pick.id && !state.queue.find((s) => s.id === c.id),
+          );
+          if (alt) state.queue.push(alt);
+          else break;
+        } else {
+          state.queue.push(pick);
+        }
+        // Pre-fetch lyrics in background — by the time user hits this song,
+        // its lyrics are in localStorage cache and toggle is instant.
+        prefetchLyricsBackground(state.queue[state.queue.length - 1]);
+      }
+    } finally { queueRefilling = false; }
+  }
+  function clearQueue() { state.queue = []; }
 
   /* DES decryption */
   function desDecryptUrl(b64) {
@@ -1078,7 +1121,7 @@
     } catch (e) { return null; }
   }
 
-  /* ============== LYRICS — fast: parallel fetch + cache + prefetch ============== */
+  /* LYRICS — parallel race + cache */
   function parseLRC(text) {
     if (!text) return null;
     const out = [];
@@ -1095,9 +1138,9 @@
     return out.length ? out : null;
   }
   function isLatinScript(text) {
-    const sample = text.slice(0, 600);
-    const latin = (sample.match(/[A-Za-z]/g) || []).length;
-    const indic = (sample.match(/[ऀ-෿]/g) || []).length;
+    const s = text.slice(0, 600);
+    const latin = (s.match(/[A-Za-z]/g) || []).length;
+    const indic = (s.match(/[ऀ-෿]/g) || []).length;
     return latin > 30 && indic < 10;
   }
   function getLyricsCache(songId) {
@@ -1113,7 +1156,6 @@
     try { localStorage.setItem(LYRICS_CACHE_PREFIX + songId, JSON.stringify({ ts: Date.now(), data })); }
     catch (_) {}
   }
-  // Race all URL variants in parallel — first synced result wins.
   async function fetchLyricsRaceParallel(song, signal) {
     const enc = encodeURIComponent;
     const urls = [
@@ -1122,9 +1164,8 @@
       `https://lrclib.net/api/get?artist_name=${enc(song.artist || '')}&track_name=${enc(song.title || '')}`,
     ];
     return new Promise((resolve) => {
-      let resolved = false;
-      let pending = urls.length + 1;
-      const finishIfNeeded = () => { if (!resolved && --pending === 0) resolve(null); };
+      let resolved = false; let pending = urls.length + 1;
+      const finish = () => { if (!resolved && --pending === 0) resolve(null); };
       urls.forEach((u) => {
         fetch(u, { signal }).then((r) => r.ok ? r.json() : null).then((data) => {
           if (resolved) return;
@@ -1132,10 +1173,9 @@
             const parsed = parseLRC(data.syncedLyrics);
             if (parsed) { resolved = true; resolve({ lines: parsed, raw: data.syncedLyrics }); return; }
           }
-          finishIfNeeded();
-        }).catch(() => finishIfNeeded());
+          finish();
+        }).catch(() => finish());
       });
-      // Search fallback runs in parallel too
       const q = (song.title || '') + ' ' + (song.movie || '');
       fetch(`https://lrclib.net/api/search?q=${enc(q.trim())}`, { signal })
         .then((r) => r.ok ? r.json() : null)
@@ -1146,9 +1186,9 @@
             const parsed = parseLRC(match.syncedLyrics);
             if (parsed) { resolved = true; resolve({ lines: parsed, raw: match.syncedLyrics }); return; }
           }
-          finishIfNeeded();
+          finish();
         })
-        .catch(() => finishIfNeeded());
+        .catch(() => finish());
     });
   }
   async function translateLyrics(rawLrc, signal) {
@@ -1178,14 +1218,13 @@
       return merged.join('\n');
     } catch (_) { return null; }
   }
-  // Background prefetch — silent, caches result
+  // Background prefetch — silent, populates cache, runs from queue.
   async function prefetchLyricsBackground(song) {
     if (!song || getLyricsCache(song.id)) return;
     try {
       const got = await fetchLyricsRaceParallel(song, undefined);
       if (!got) { setLyricsCache(song.id, { lines: null, isTranslated: false }); return; }
-      let lines = got.lines;
-      let isTranslated = false;
+      let lines = got.lines, isTranslated = false;
       if (isLatinScript(got.lines.map((l) => l.text).join(' '))) {
         const translatedRaw = await translateLyrics(got.raw, undefined);
         if (translatedRaw) {
@@ -1204,11 +1243,7 @@
     $('lyrics-state-text').textContent = text;
     $('lyrics-loading').hidden = !loading;
     const icon = $('lyrics-state-icon');
-    if (icon) {
-      icon.textContent = kind === 'searching' ? 'search'
-                       : kind === 'instrumental' ? 'music_note'
-                       : 'lyrics';
-    }
+    if (icon) icon.textContent = kind === 'searching' ? 'search' : kind === 'instrumental' ? 'music_note' : 'lyrics';
     $('lyrics-track').innerHTML = '';
   }
   function hideLyricsState() { $('lyrics-state').classList.add('hidden'); }
@@ -1261,7 +1296,7 @@
       else if (Math.abs(i - idx) === 1) el.classList.add('near');
     }
     if (activeEl) {
-      const body = $('pane-lyrics').querySelector('.pane-lyrics-body');
+      const body = $('lyrics-body');
       const bodyH = body.clientHeight;
       const lineCenter = activeEl.offsetTop + activeEl.offsetHeight / 2;
       track.style.transform = `translateY(${(bodyH / 2) - lineCenter}px)`;
@@ -1271,7 +1306,6 @@
     const song = state.current;
     if (!song) return;
     if (lyricsState.fetchedSongId === song.id) return;
-    // Cache hit?
     const cached = getLyricsCache(song.id);
     if (cached) {
       lyricsState.fetchedSongId = song.id;
@@ -1285,7 +1319,6 @@
       }
       return;
     }
-    // Live fetch with loading dots
     if (lyricsState.abort) lyricsState.abort.abort();
     lyricsState.abort = new AbortController();
     showLyricsState('Searching for lyrics…', 'searching', true);
@@ -1297,9 +1330,7 @@
       lyricsState.forSongId = song.id;
       lyricsState.isTranslated = false;
       renderLyricsLines();
-      // Cache immediately so subsequent toggles are instant
       setLyricsCache(song.id, { lines: got.lines, isTranslated: false });
-      // Translate to Telugu if English
       if (isLatinScript(got.lines.map((l) => l.text).join(' '))) {
         showLyricsState('Translating to Telugu…', 'searching', true);
         const translatedRaw = await translateLyrics(got.raw, lyricsState.abort.signal);
@@ -1323,9 +1354,8 @@
     }
   }
 
-  /* ============== FLIP CARD STATE MACHINE ============== */
+  /* FLIP CARD */
   function setBackPane(mode) {
-    // mode: 'lyrics' | 'search'
     $('pane-lyrics').classList.toggle('show', mode === 'lyrics');
     $('pane-search').classList.toggle('show', mode === 'search');
   }
@@ -1333,14 +1363,13 @@
     state.cardMode = mode;
     setBackPane(mode);
     $('cover-stage').classList.add('flipped');
-    $('btn-lyrics').classList.toggle('toggle-on', mode === 'lyrics');
-    $('btn-search').classList.toggle('toggle-on', mode === 'search');
     if (mode === 'lyrics') {
       if (state.current) {
-        $('pane-lyrics-title').textContent = `${state.current.title} · ${state.current.movie || 'Telugu'}`;
+        $('pane-lyrics-title').textContent = state.current.title;
+        $('pane-lyrics-sub').textContent = state.current.movie || 'Telugu film';
         loadLyricsForCurrentSong();
       } else {
-        showLyricsState('Press shuffle first', 'instrumental', false);
+        showLyricsState('Press anywhere to start a song first', 'instrumental', false);
       }
     } else if (mode === 'search') {
       setTimeout(() => $('search-input').focus(), 350);
@@ -1349,22 +1378,14 @@
   function flipToFront() {
     state.cardMode = 'front';
     $('cover-stage').classList.remove('flipped');
-    $('btn-lyrics').classList.remove('toggle-on');
-    $('btn-search').classList.remove('toggle-on');
   }
-  function toggleLyrics() {
-    if (state.cardMode === 'lyrics') flipToFront();
-    else flipToBack('lyrics');
-  }
-  function toggleSearch() {
-    if (state.cardMode === 'search') flipToFront();
-    else flipToBack('search');
-  }
+  function toggleLyrics() { state.cardMode === 'lyrics' ? flipToFront() : flipToBack('lyrics'); }
+  function toggleSearch() { state.cardMode === 'search' ? flipToFront() : flipToBack('search'); }
 
   /* AUDIO */
   const audio = $('audio');
-  audio.addEventListener('play',  () => { state.isPlaying = true;  renderPlayState(); });
-  audio.addEventListener('pause', () => { state.isPlaying = false; renderPlayState(); });
+  audio.addEventListener('play',  () => { state.isPlaying = true;  renderPlayState(); flashPlayIndicator('play_arrow'); });
+  audio.addEventListener('pause', () => { state.isPlaying = false; renderPlayState(); flashPlayIndicator('pause'); });
   audio.addEventListener('ended', () => nextRandom());
   audio.addEventListener('timeupdate', () => {
     const cur = audio.currentTime;
@@ -1375,14 +1396,25 @@
     $('time-cur').textContent = fmt(cur);
     $('time-tot').textContent = fmt(tot);
     $('progress').setAttribute('aria-valuenow', Math.round(pct));
-    if (state.cardMode === 'lyrics' && lyricsState.lines && lyricsState.forSongId === state.current?.id) {
-      updateActiveLyric();
-    }
+    if (state.cardMode === 'lyrics' && lyricsState.lines && lyricsState.forSongId === state.current?.id) updateActiveLyric();
   });
   audio.addEventListener('error', () => {
     showToast('Couldn’t play that one · skipping');
     setTimeout(nextRandom, 200);
   });
+
+  function flashPlayIndicator(icon) {
+    const ind = $('play-indicator');
+    $('play-indicator-icon').textContent = icon;
+    ind.classList.remove('show', 'hide');
+    void ind.offsetWidth;
+    ind.classList.add('show');
+    setTimeout(() => {
+      ind.classList.remove('show');
+      ind.classList.add('hide');
+      setTimeout(() => ind.classList.remove('hide'), 250);
+    }, 350);
+  }
 
   /* PLAYBACK */
   function play(song, opts = {}) {
@@ -1397,14 +1429,15 @@
     renderNowPlaying();
     updateMediaSession(song);
     clearLyrics();
-    // If lyrics card is currently visible, reload for new song
     if (state.cardMode === 'lyrics') {
-      $('pane-lyrics-title').textContent = `${song.title} · ${song.movie || 'Telugu'}`;
-      setTimeout(() => loadLyricsForCurrentSong(), 50);
+      $('pane-lyrics-title').textContent = song.title;
+      $('pane-lyrics-sub').textContent = song.movie || 'Telugu film';
+      setTimeout(() => loadLyricsForCurrentSong(), 30);
     }
-    // Background pre-fetch lyrics so toggling later is instant
-    setTimeout(() => prefetchLyricsBackground(song), 300);
-    setTimeout(() => prefetchNext(), 400);
+    // Prefetch lyrics for the song that JUST played (if not already cached)
+    if (!getLyricsCache(song.id)) setTimeout(() => prefetchLyricsBackground(song), 150);
+    // Refill queue in the background — keeps next 4 songs ready
+    setTimeout(() => refillQueue(), 100);
   }
   function togglePlay() {
     if (!state.current) { nextRandom(); return; }
@@ -1412,7 +1445,11 @@
     else audio.pause();
   }
   function nextRandom(opts) {
-    const next = pickNext();
+    let next = state.queue.shift();
+    if (!next) {
+      const cands = sampleCandidates(AI_CANDIDATE_COUNT);
+      if (cands.length) next = cands[0];
+    }
     if (next) play(next, opts);
   }
   function prev() {
@@ -1427,9 +1464,6 @@
 
   /* RENDER */
   function renderPlayState() {
-    $('btn-play-icon').textContent = state.isPlaying ? 'pause' : 'play_arrow';
-    $('btn-play').setAttribute('aria-label', state.isPlaying ? 'Pause' : 'Play');
-    $('surface').classList.toggle('playing', state.isPlaying);
     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = state.isPlaying ? 'playing' : 'paused';
   }
   function renderNowPlaying() {
@@ -1452,12 +1486,8 @@
   }
   function syncDialHighlight() {
     let active = state.era;
-    if (state.era === 'all' && state.current && state.current.era && state.current.era !== 'all') {
-      active = state.current.era;
-    }
-    document.querySelectorAll('.chip').forEach((btn) => {
-      btn.setAttribute('aria-pressed', btn.dataset.era === active ? 'true' : 'false');
-    });
+    if (state.era === 'all' && state.current && state.current.era && state.current.era !== 'all') active = state.current.era;
+    document.querySelectorAll('.chip').forEach((btn) => btn.setAttribute('aria-pressed', btn.dataset.era === active ? 'true' : 'false'));
   }
 
   /* MEDIA SESSION */
@@ -1500,8 +1530,7 @@
     const reel = $('reel');
     let startY = 0, startX = 0, dy = 0, dx = 0, swiping = false;
     function onStart(e) {
-      // Don't swipe if interacting with controls or back panes
-      if (e.target.closest('button, input, .progress, .actions, .play-controls, .era-row, .top-strip, .face.back, .pane-lyrics, .pane-search')) {
+      if (e.target.closest('button, input, .progress, .actions, .era-row, .top-strip, .face.back, .pane-lyrics, .pane-search, .meta-overlay')) {
         swiping = false; return;
       }
       const t = e.touches ? e.touches[0] : e;
@@ -1557,8 +1586,7 @@
     reel.addEventListener('wheel', (e) => {
       if (wheelLock) return;
       if (Math.abs(e.deltaY) < 30) return;
-      // Don't trigger swipe if mouse is over a back pane (allow scrolling)
-      if (e.target.closest('.face.back, .pane-search-results, .pane-lyrics-body')) return;
+      if (e.target.closest('.face.back, .search-results, .lyrics-body')) return;
       wheelLock = true;
       setTimeout(() => { wheelLock = false; }, 600);
       if (e.deltaY > 0) nextRandom(); else prev();
@@ -1566,8 +1594,7 @@
   }
 
   /* SEARCH */
-  let searchTimer = null;
-  let searchAbort = null;
+  let searchTimer = null, searchAbort = null;
   async function performSearch(q) {
     const results = $('search-results');
     if (q.length < 2) { results.innerHTML = ''; return; }
@@ -1628,20 +1655,10 @@
       state.era = newEra;
       document.querySelectorAll('.chip').forEach((b) => b.setAttribute('aria-pressed', 'false'));
       btn.setAttribute('aria-pressed', 'true');
-      nextPickCache = null;
-      if (state.catalog.length) nextRandom();
+      clearQueue(); // queue is era-specific
+      if (state.catalog.length) { nextRandom(); refillQueue(); }
     });
   });
-  $('shuffle-mega').addEventListener('click', (e) => {
-    e.stopPropagation();
-    const btn = $('shuffle-mega');
-    btn.classList.remove('spin'); void btn.offsetWidth; btn.classList.add('spin');
-    nextRandom();
-  });
-  $('btn-play').addEventListener('click', (e) => { e.stopPropagation(); togglePlay(); });
-  $('btn-next').addEventListener('click', (e) => { e.stopPropagation(); nextRandom(); });
-  $('btn-prev').addEventListener('click', (e) => { e.stopPropagation(); prev(); });
-  $('btn-mystery').addEventListener('click', (e) => { e.stopPropagation(); nextRandom({ mystery: true }); });
   $('btn-like').addEventListener('click', (e) => {
     e.stopPropagation();
     const s = state.current;
@@ -1656,21 +1673,25 @@
     if (!wasLiked) {
       btn.classList.remove('liked'); void btn.offsetWidth; btn.classList.add('liked');
     }
-    nextPickCache = null;
-    setTimeout(() => prefetchNext(), 100);
+    // Likes affect queue picks — clear and refill
+    clearQueue(); refillQueue();
   });
   $('btn-lyrics').addEventListener('click', (e) => { e.stopPropagation(); toggleLyrics(); });
   $('btn-search').addEventListener('click', (e) => { e.stopPropagation(); toggleSearch(); });
-  $('btn-flip-back').addEventListener('click', (e) => { e.stopPropagation(); flipToFront(); });
-  $('btn-flip-back-2').addEventListener('click', (e) => { e.stopPropagation(); flipToFront(); });
+  $('btn-mystery').addEventListener('click', (e) => { e.stopPropagation(); nextRandom({ mystery: true }); });
+  $('btn-flip-back-lyrics').addEventListener('click', (e) => { e.stopPropagation(); flipToFront(); });
+  $('btn-flip-back-search').addEventListener('click', (e) => { e.stopPropagation(); flipToFront(); });
   $('btn-theme').addEventListener('click', (e) => {
     e.stopPropagation();
     state.theme = state.theme === 'dark' ? 'light' : 'dark';
     applyTheme(state.theme);
   });
-  $('cover').addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (state.cardMode === 'front') togglePlay();
+  // Cover tap = play/pause (only on front face)
+  $('cover-stage').addEventListener('click', (e) => {
+    // Only respond if click is directly on the front face (not action buttons)
+    if (state.cardMode !== 'front') return;
+    if (e.target.closest('.actions, .top-strip, .progress, .era-row, .meta-overlay')) return;
+    togglePlay();
   });
 
   $('search-input').addEventListener('input', (e) => {
@@ -1680,8 +1701,7 @@
   });
   $('search-results').addEventListener('click', (e) => {
     const btn = e.target.closest('.search-result');
-    if (!btn) return;
-    playSearchedSong(btn.dataset.id);
+    if (btn) playSearchedSong(btn.dataset.id);
   });
 
   $('progress').addEventListener('click', (ev) => {
@@ -1700,7 +1720,7 @@
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
     else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') nextRandom();
     else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') prev();
-    else if (e.key.toLowerCase() === 's') $('shuffle-mega').click();
+    else if (e.key.toLowerCase() === 's') nextRandom();
     else if (e.key.toLowerCase() === 'l') $('btn-like').click();
     else if (e.key.toLowerCase() === 'm') $('btn-mystery').click();
     else if (e.key.toLowerCase() === 't') $('btn-theme').click();
@@ -1714,13 +1734,15 @@
   wireSwipe();
   setTimeout(() => {
     $('swipe-hint').classList.add('show');
-    setTimeout(() => $('swipe-hint').classList.remove('show'), 3500);
+    setTimeout(() => $('swipe-hint').classList.remove('show'), 4000);
   }, 1500);
 
   loadCatalog().then((cat) => {
     state.catalog = cat;
     $('booting').classList.add('hidden');
-    if (!cat.length) showToast('Couldn’t load catalogue · check connection', 5000);
+    if (!cat.length) { showToast('Couldn’t load catalogue · check connection', 5000); return; }
+    // Pre-fill the queue immediately so the first swipe is instant
+    refillQueue();
   }).catch(() => {
     $('booting').classList.add('hidden');
     showToast('Catalogue load failed · check connection', 5000);
