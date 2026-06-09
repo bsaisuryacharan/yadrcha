@@ -2031,32 +2031,40 @@ try {
       uColorA: { value: new THREE.Color(0x2a1556) },
       uColorB: { value: new THREE.Color(0xc4a4ff) },
       uColorC: { value: new THREE.Color(0xff3b6b) },
+      uPointer: { value: new THREE.Vector3(0, 0, 1) },  // cursor dir on the orb
+      uPointerStr: { value: 0 },                         // hotspot strength 0..1
+      uFlash: { value: 0 },                              // like/burst whole-orb flash
     };
 
     const vert = SNOISE + `
-      uniform float uTime, uAudio, uBass, uDistort;
-      varying float vN; varying vec3 vNormalV, vViewV;
+      uniform float uTime, uAudio, uBass, uDistort, uPointerStr;
+      uniform vec3 uPointer;
+      varying float vN, vHot; varying vec3 vNormalV, vViewV;
       void main(){
         float t = uTime*0.35;
         float n = snoise(position*1.1 + vec3(0.0, t, 0.0));
         n += 0.5*snoise(position*2.3 + vec3(t*1.3, 0.0, 0.0));
         n += 0.25*snoise(position*4.9 - vec3(0.0, 0.0, t*1.7));
         float disp = (uDistort + uAudio*0.8 + uBass*0.6) * n;
-        vN = n;
-        vec3 np = position + normal*disp*0.42;
+        // localized bulge toward the cursor/finger — the orb reacts to touch
+        float hot = smoothstep(0.5, 1.0, dot(normalize(position), uPointer)) * uPointerStr;
+        vHot = hot; vN = n;
+        vec3 np = position + normal*(disp*0.42 + hot*0.22);
         vec4 mv = modelViewMatrix*vec4(np, 1.0);
         vNormalV = normalize(normalMatrix*normal);
         vViewV = normalize(-mv.xyz);
         gl_Position = projectionMatrix*mv;
       }`;
     const frag = `
-      uniform vec3 uColorA, uColorB, uColorC; uniform float uAudio, uTreble;
-      varying float vN; varying vec3 vNormalV, vViewV;
+      uniform vec3 uColorA, uColorB, uColorC; uniform float uAudio, uTreble, uFlash;
+      varying float vN, vHot; varying vec3 vNormalV, vViewV;
       void main(){
         float fres = pow(1.0-max(dot(vNormalV, vViewV), 0.0), 2.2+uAudio*3.0);
         vec3 base = mix(uColorA, uColorB, smoothstep(-0.8, 0.9, vN));
         base = mix(base, uColorC, smoothstep(0.35, 1.0, vN)*(0.35+uTreble*0.65));
         vec3 col = base + fres*(0.7+uAudio*1.3);
+        col += vHot * mix(uColorC, vec3(1.0), 0.5) * 1.1;     // glowing touch hotspot
+        col += uFlash * mix(uColorC, vec3(1.0), 0.6) * 1.3;   // like / burst flash
         gl_FragColor = vec4(col, 1.0);
       }`;
 
@@ -2099,6 +2107,45 @@ try {
     const pGeo = new THREE.BufferGeometry(); pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
     const pMat = new THREE.PointsMaterial({ color: 0xd9c8ff, size: 0.03, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false });
     const particles = new THREE.Points(pGeo, pMat); scene.add(particles);
+
+    /* ---- interactivity: shockwave rings, touch hotspot, beat & like bursts ---- */
+    // Pool of expanding light rings reused round-robin.
+    const RINGS = 7, rings = [];
+    const ringGeo = new THREE.RingGeometry(0.93, 1.0, 72);
+    for (let i = 0; i < RINGS; i++) {
+      const rm = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+      const r = new THREE.Mesh(ringGeo, rm); r.visible = false; scene.add(r); rings.push(r);
+    }
+    let ringIdx = 0;
+    function fireRing(color, fromR, toR, dur, op) {
+      const r = rings[ringIdx]; ringIdx = (ringIdx + 1) % RINGS;
+      r.material.color.set(color); r.material.opacity = op; r.scale.setScalar(fromR); r.visible = true;
+      r.userData = { life: 0, from: fromR, to: toR, dur: dur, op: op };
+    }
+    // Beat/like punch (scale kick) and flash (whole-orb glow), both decaying.
+    let punch = 0, flash = 0, bassPrev = 0, lastBeat = 0;
+    function burst(strength, color) {
+      flash = Math.min(1.5, flash + strength);
+      punch = Math.min(1.3, punch + strength * 0.5);
+      fireRing(color, 1.0, 4.0, 1.0, 0.85);
+    }
+    // Raycast the cursor onto the orb so the surface bulges/glows where you point.
+    const raycaster = new THREE.Raycaster();
+    const proxSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 1.2);
+    const hitV = new THREE.Vector3(), ndc = new THREE.Vector2();
+    let lastMove = -1e9;
+
+    // ❤️ Like → supernova flare (runs after the app's own like handler, which
+    // toggles aria-pressed first since it was registered earlier).
+    const likeBtn = document.getElementById('btn-like');
+    if (likeBtn) likeBtn.addEventListener('click', () => {
+      if (likeBtn.getAttribute('aria-pressed') === 'true') {
+        burst(1.4, uniforms.uColorC.value);
+        fireRing(uniforms.uColorC.value, 1.0, 4.6, 1.2, 0.9);
+      } else {
+        fireRing(0x999999, 1.0, 2.2, 0.6, 0.35);
+      }
+    });
 
     /* ---- cover-driven colour palette (orb tints to the poster's tone;
        the poster itself is shown crisply in the now-playing thumbnail) ---- */
@@ -2148,13 +2195,14 @@ try {
     audio.addEventListener('play', () => { wireAudio(); resume(); });
 
     let playing = false;
-    audio.addEventListener('play', () => { playing = true; });
-    audio.addEventListener('pause', () => { playing = false; });
+    // every play / song-change sends a shockwave + scale kick out of the orb
+    audio.addEventListener('play', () => { playing = true; punch = Math.min(1.3, punch + 0.55); fireRing(uniforms.uColorB.value, 1.0, 3.6, 0.9, 0.7); });
+    audio.addEventListener('pause', () => { playing = false; fireRing(0x999999, 1.0, 2.4, 0.7, 0.4); });
     audio.addEventListener('ended', () => { playing = false; });
 
-    /* ---- parallax ---- */
+    /* ---- parallax + touch tracking ---- */
     let pX = 0, pY = 0, tX = 0, tY = 0;
-    window.addEventListener('pointermove', (e) => { tX = (e.clientX/window.innerWidth-0.5)*2; tY = (e.clientY/window.innerHeight-0.5)*2; }, { passive: true });
+    window.addEventListener('pointermove', (e) => { tX = (e.clientX/window.innerWidth-0.5)*2; tY = (e.clientY/window.innerHeight-0.5)*2; lastMove = performance.now(); }, { passive: true });
     window.addEventListener('deviceorientation', (e) => { if (e.gamma == null) return; tX = Math.max(-1, Math.min(1, e.gamma/35)); tY = Math.max(-1, Math.min(1, ((e.beta||40)-40)/35)); }, { passive: true });
 
     function resize() { const w = canvas.clientWidth || 1, h = canvas.clientHeight || 1; if (!w || !h) return; renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix(); }
@@ -2175,11 +2223,40 @@ try {
       amp += (tA-amp)*0.15; bass += (tB-bass)*0.2; treb += (tT-treb)*0.18;
       uniforms.uTime.value = now/1000;
       uniforms.uAudio.value = amp; uniforms.uBass.value = bass; uniforms.uTreble.value = treb;
+
+      // beat detection on bass transients → bloom ring + scale kick
+      if (playing && bass - bassPrev > 0.07 && bass > 0.5 && now - lastBeat > 230) {
+        lastBeat = now; punch = Math.min(1.3, punch + 0.4);
+        fireRing(uniforms.uColorC.value, 0.95, 3.2, 0.8, 0.5);
+      }
+      bassPrev = bass;
+      punch *= 0.90; flash *= 0.88; uniforms.uFlash.value = flash;
+
+      // cursor → orb hotspot (bulge + glow where you point)
+      ndc.set(tX, -tY); raycaster.setFromCamera(ndc, camera);
+      let pStr = 0;
+      if (raycaster.ray.intersectSphere(proxSphere, hitV)) {
+        group.worldToLocal(hitV); hitV.normalize();
+        uniforms.uPointer.value.copy(hitV);
+        pStr = (now - lastMove < 2500) ? 1 : 0;
+      }
+      uniforms.uPointerStr.value += (pStr - uniforms.uPointerStr.value) * 0.12;
+
       const spin = (playing ? 0.12 : 0.04) + bass*0.15;
       group.rotation.y += spin*dt*(reduceMotion ? 0.2 : 1);
       group.rotation.x = Math.sin(now/4000)*0.1;
-      group.scale.setScalar(1+bass*0.08);
+      group.scale.setScalar(1 + bass*0.08 + punch*0.1);
       if (glowEl) glowEl.style.opacity = (playing ? 0.5+amp*0.55 : 0.4).toFixed(3);
+
+      // animate shockwave rings (expand + fade, billboarded to camera)
+      for (let i = 0; i < RINGS; i++) {
+        const r = rings[i]; if (!r.visible) continue;
+        const u = r.userData; u.life += dt / u.dur;
+        if (u.life >= 1) { r.visible = false; continue; }
+        r.scale.setScalar(u.from + (u.to - u.from) * u.life);
+        r.material.opacity = u.op * (1 - u.life);
+        r.lookAt(camera.position);
+      }
       if (!reduceMotion) {
         const pa = particles.geometry.attributes.position;
         for (let i = 0; i < PCOUNT; i++) {
