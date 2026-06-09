@@ -7,9 +7,13 @@ on:
   workflow_dispatch:
     inputs:
       max_lookups:
-        description: 'Max YouTube lookups this run (cap workflow time)'
+        description: 'Max song-detail lookups this run'
         required: false
-        default: '300'
+        default: '900'
+      time_budget_min:
+        description: 'Wall-clock budget in minutes (script self-stops before CI timeout)'
+        required: false
+        default: '40'
 
 permissions:
   contents: write
@@ -39,9 +43,15 @@ jobs:
       - name: Refresh catalog
         env:
           MAX_DETAILS: ${{ inputs.max_lookups || '900' }}
+          # Script self-stops at this wall-clock budget so it always reaches
+          # the save+commit step. Kept under timeout-minutes (50) as a net.
+          TIME_BUDGET_MIN: ${{ inputs.time_budget_min || '40' }}
         run: python scripts/refresh_catalog.py
 
       - name: Commit changes
+        # Run even if the refresh step errored — the script saves catalog.json
+        # incrementally, so we still commit whatever fresh songs it banked.
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

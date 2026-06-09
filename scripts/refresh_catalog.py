@@ -24,6 +24,7 @@ import base64
 import html
 import json
 import os
+import random
 import re
 import sys
 import time
@@ -92,6 +93,34 @@ QUERIES = [
 CATALOG_PATH = Path('catalog.json')
 MAX_DETAILS = int(os.environ.get('MAX_DETAILS', '600'))
 
+# --- Run budgeting -------------------------------------------------------
+# The catalog grows unbounded (10k+ songs), so a naive run tries to expand
+# thousands of albums and probe thousands of lyrics — far beyond any CI
+# time limit. The job then gets *cancelled* mid-step, which means the
+# commit step never runs and the catalog never updates.
+#
+# Fix: every phase respects a single wall-clock deadline and a hard cap, so
+# the script ALWAYS reaches save+commit. Each run does a bounded chunk of
+# work; coverage accumulates across daily runs because album/lyrics targets
+# are shuffled (different slice each day) and progress is persisted.
+TIME_BUDGET_MIN = float(os.environ.get('TIME_BUDGET_MIN', '38'))
+MAX_ALBUMS = int(os.environ.get('MAX_ALBUMS', '350'))    # albums to expand / run
+MAX_LYRICS = int(os.environ.get('MAX_LYRICS', '500'))    # lyrics probes / run
+
+_START = time.monotonic()
+_DEADLINE = _START + TIME_BUDGET_MIN * 60
+
+
+def elapsed() -> float:
+    return time.monotonic() - _START
+
+
+def over_budget(fraction: float = 1.0) -> bool:
+    """True once `fraction` of the time budget has been consumed.
+    Phases pass a fraction (<1.0) to reserve tail-time for save+commit."""
+    return time.monotonic() >= _START + TIME_BUDGET_MIN * 60 * fraction
+
+
 DES_KEY = b'38346591'
 
 API_BASE = 'https://www.jiosaavn.com/api.php'
@@ -120,14 +149,18 @@ def jio_get(call: str, params: dict, max_attempts: int = 5) -> dict | None:
         **params,
     }
     url = f'{API_BASE}?{urllib.parse.urlencode(qs)}'
-    delay = 10
+    delay = 5
     for attempt in range(1, max_attempts + 1):
+        # Don't start a fresh retry-with-backoff if we've blown the budget —
+        # bail so the caller can move on toward save+commit.
+        if over_budget():
+            return None
         try:
             r = SESSION.get(url, timeout=20)
             if r.status_code in (429, 502, 503):
                 print(f'  ! {call} {r.status_code} (attempt {attempt}/{max_attempts}) — wait {delay}s', file=sys.stderr)
                 time.sleep(delay)
-                delay = min(delay * 2, 240)
+                delay = min(delay * 2, 60)
                 continue
             r.raise_for_status()
             # JioSaavn sometimes returns JSON-with-junk-prefix; tolerate
@@ -143,7 +176,7 @@ def jio_get(call: str, params: dict, max_attempts: int = 5) -> dict | None:
         except Exception as e:
             print(f'  ! {call} error (attempt {attempt}): {e}', file=sys.stderr)
             time.sleep(delay)
-            delay = min(delay * 2, 240)
+            delay = min(delay * 2, 60)
     return None
 
 
@@ -196,7 +229,7 @@ def probe_lyrics(song: dict) -> str | None:
     ]
     for url in urls:
         try:
-            r = requests.get(url, timeout=8, headers={'User-Agent': 'yadrcha-catalog/1.0'})
+            r = requests.get(url, timeout=5, headers={'User-Agent': 'yadrcha-catalog/1.0'})
             if r.status_code != 200:
                 continue
             data = r.json()
@@ -489,10 +522,21 @@ def main() -> int:
     existing_count = len(by_id)
     print(f'Loaded {existing_count} existing songs')
 
-    # 1. Search across queries — collect candidate song IDs AND album IDs
+    # Shuffle the query order so that, when a run can't finish every query
+    # within budget, a different slice gets prioritised each day.
+    queries = list(QUERIES)
+    random.shuffle(queries)
+
+    # 1. Search across queries — collect candidate song IDs AND album IDs.
+    # Reserve most of the budget for album expansion + details + lyrics, so
+    # cap the search phase to the first ~20% of the clock.
     candidates: dict[str, dict] = {}      # song_id -> light search result
-    album_ids: set[str] = set()           # unique album_ids to expand later
-    for i, q in enumerate(QUERIES, 1):
+    album_ids: list[str] = []             # unique album_ids to expand later
+    seen_albums: set[str] = set()
+    for i, q in enumerate(queries, 1):
+        if over_budget(0.20):
+            print(f'  … search budget reached at query {i}/{len(queries)} ({elapsed():.0f}s)')
+            break
         results = search_songs(q)
         added = 0
         for r in results:
@@ -503,20 +547,34 @@ def main() -> int:
                 candidates[sid] = r
                 added += 1
             aid = r.get('albumid')
-            if aid:
-                album_ids.add(str(aid))
-        print(f'[search {i}/{len(QUERIES)}] {q!r}: {len(results)} hits, {added} new candidates')
+            if aid and str(aid) not in seen_albums:
+                seen_albums.add(str(aid))
+                album_ids.append(str(aid))
+        print(f'[search {i}/{len(queries)}] {q!r}: {len(results)} hits, {added} new candidates')
         time.sleep(1.0)
 
-    print(f'Search phase: {len(candidates)} new candidates, {len(album_ids)} unique albums to expand')
+    print(f'Search phase: {len(candidates)} new candidates, {len(album_ids)} unique albums seen')
 
     # 2. Album expansion — for each unique album (movie soundtrack), fetch
     # ALL songs in it. Search only returns 1-2 popular per album; albums
     # have 5-15 songs each. This is where the multiplier comes from.
-    print(f'Expanding {len(album_ids)} albums...')
+    #
+    # A mature catalog surfaces thousands of albums per run — expanding all
+    # of them is what blew past the CI timeout. So: shuffle, cap to
+    # MAX_ALBUMS, and stop early at ~45% of the clock. Shuffling means a
+    # different slice of albums is expanded each day, so coverage still
+    # grows over time.
+    random.shuffle(album_ids)
+    album_targets = album_ids[:MAX_ALBUMS]
+    print(f'Expanding {len(album_targets)} of {len(album_ids)} albums (cap {MAX_ALBUMS})...')
     album_expansion_added = 0
-    for j, aid in enumerate(album_ids, 1):
+    albums_done = 0
+    for j, aid in enumerate(album_targets, 1):
+        if over_budget(0.45):
+            print(f'  … album budget reached at {j}/{len(album_targets)} ({elapsed():.0f}s)')
+            break
         songs = album_songs(aid)
+        albums_done = j
         for song in songs:
             sid = song.get('id')
             if not sid:
@@ -526,13 +584,20 @@ def main() -> int:
             candidates[sid] = song
             album_expansion_added += 1
         if j % 25 == 0:
-            print(f'  album {j}/{len(album_ids)} | added {album_expansion_added} songs from albums')
+            print(f'  album {j}/{len(album_targets)} | added {album_expansion_added} songs from albums')
         time.sleep(0.4)
-    print(f'Album expansion: +{album_expansion_added} songs (total candidates: {len(candidates)})')
+    print(f'Album expansion: {albums_done} albums, +{album_expansion_added} songs '
+          f'(total candidates: {len(candidates)})')
 
-    # 2. Fetch full details (with encrypted_media_url) in parallel.
-    # Cap at MAX_DETAILS so a single workflow run stays under the time budget.
-    todo = list(candidates.values())[:MAX_DETAILS]
+    # 3. Fetch full details (with encrypted_media_url) in parallel.
+    # Candidates that already carry encrypted_media_url (from search /album
+    # expansion) need NO extra API call — sort those first so we bank the
+    # cheap wins before spending time on per-song detail lookups. Cap at
+    # MAX_DETAILS; the per-worker budget guard drains the pool fast once the
+    # clock runs out.
+    all_candidates = list(candidates.values())
+    all_candidates.sort(key=lambda m: 0 if m.get('encrypted_media_url') else 1)
+    todo = all_candidates[:MAX_DETAILS]
     print(f'Fetching details for {len(todo)} songs (4 parallel workers)...')
 
     save_lock = Lock()
@@ -541,7 +606,11 @@ def main() -> int:
     completed = 0
 
     def worker(meta):
-        # If candidate (e.g. from album.getDetails) already has the
+        # Once we cross 80% of the budget, stop issuing new network work so
+        # the executor drains quickly and we reach save+commit in time.
+        if over_budget(0.80):
+            return None
+        # If candidate (e.g. from album expansion) already has the
         # encrypted_media_url, normalize directly — saves an API call.
         if meta.get('encrypted_media_url') and meta.get('language'):
             n = normalize_detail(meta)
@@ -578,29 +647,40 @@ def main() -> int:
     cat = {'version': 2, 'songs': list(by_id.values())}
     save_catalog(cat)
 
-    # 3. Probe LRClib for every song that hasn't been probed yet, in
-    # parallel. Inline the LRC text into the catalog row so the frontend
-    # never needs a runtime fetch for known songs. This is the senior-
-    # architect move: pre-compute everything at build time, runtime is
-    # zero-network for all known songs.
+    # 4. Probe LRClib for songs not yet probed, in parallel. Inline the LRC
+    # text into the catalog row so the frontend never needs a runtime fetch
+    # for known songs — pre-compute at build time, runtime is zero-network.
+    #
+    # With 10k+ songs this is itself unbounded, so shuffle + cap to
+    # MAX_LYRICS per run and stop near the deadline. Songs marked 'nl'
+    # (probed, no lyrics) are skipped on later runs, so the unprobed pool
+    # shrinks every day until the whole catalog is covered.
     unprobed = [s for s in by_id.values()
                 if 'lr' not in s and 'nl' not in s]
-    print(f'Probing LRClib for {len(unprobed)} songs (4 parallel workers)...')
+    random.shuffle(unprobed)
+    unprobed = unprobed[:MAX_LYRICS]
+    print(f'Probing LRClib for {len(unprobed)} songs (4 parallel workers, cap {MAX_LYRICS})...')
     probe_done = 0; probe_hit = 0
     save_every = 50
 
     def lyrics_worker(s):
-        return s, probe_lyrics(s)
+        # Short-circuit once the deadline is essentially reached so the pool
+        # drains and we still get a final save below.
+        if over_budget(0.98):
+            return s, None, True
+        return s, probe_lyrics(s), False
 
     if unprobed:
         with ThreadPoolExecutor(max_workers=4) as ex:
             futures = [ex.submit(lyrics_worker, s) for s in unprobed]
             for fut in as_completed(futures):
                 try:
-                    s, raw = fut.result()
+                    s, raw, skipped = fut.result()
                 except Exception as e:
                     print(f'  ! lyrics-probe exception: {e}', file=sys.stderr)
                     continue
+                if skipped:
+                    continue       # leave unprobed for a future run
                 if raw:
                     s['lr'] = raw
                     probe_hit += 1
@@ -622,6 +702,7 @@ def main() -> int:
     print(f'Failed this run:   {failed}')
     print(f'With lyrics:       {with_lyrics}')
     print(f'Lyrics probed:     {probe_done} (hit {probe_hit})')
+    print(f'Elapsed:           {elapsed():.0f}s (budget {TIME_BUDGET_MIN:.0f}m)')
     return 0
 
 
