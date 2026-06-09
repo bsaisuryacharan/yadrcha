@@ -12,8 +12,16 @@
 <link rel="preconnect" href="https://c.saavncdn.com" />
 <link rel="preconnect" href="https://lrclib.net" />
 <link rel="preconnect" href="https://yadrcha-ai.bcharan197.workers.dev" />
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Serif+Display:ital@0;1&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0..200&display=swap" rel="stylesheet" />
 <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/crypto-js.min.js" defer></script>
+
+<!-- 3D turntable engine (Three.js, ES module). Loaded via import map so the
+     module script below can `import 'three'`. Purely additive — if the CDN
+     fails the app still works, the 3D stage just doesn't appear. -->
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.min.js" } }
+</script>
 
 <style>
   :root {
@@ -164,6 +172,48 @@
     pointer-events: none;
   }
 
+  /* ============== 3D TURNTABLE STAGE ============== */
+  /* The flat poster that JS paints onto the front face is hidden — the
+     movie art now lives on the spinning 3D vinyl label instead. The blurred
+     poster (reel-bg) still provides the ambient colour wash behind it. */
+  .face.front { background-image: none !important; }
+
+  /* Soft radial glow behind the record — colour comes from a CSS var the
+     3D engine keeps in sync with the current cover's dominant tone. */
+  .stage-glow {
+    position: absolute; inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(58% 46% at 50% 40%,
+        color-mix(in srgb, var(--glow, #c4a4ff) 34%, transparent) 0%,
+        color-mix(in srgb, var(--glow, #c4a4ff) 10%, transparent) 40%,
+        transparent 72%);
+    opacity: 0.9;
+    transition: background var(--t-slow);
+    animation: glowBreathe 7s ease-in-out infinite;
+    mix-blend-mode: screen;
+  }
+  @keyframes glowBreathe {
+    0%, 100% { opacity: 0.62; transform: scale(1); }
+    50%      { opacity: 0.95; transform: scale(1.06); }
+  }
+  .stage-canvas {
+    position: absolute; inset: 0;
+    z-index: 1;
+    width: 100%; height: 100%;
+    display: block;
+    pointer-events: none;            /* taps fall through to cover-stage */
+    touch-action: none;
+    transition: opacity var(--t-med);
+  }
+  /* A <canvas> is its own GPU compositing layer, so neither the parent's
+     backface-visibility nor visibility:hidden reliably stops the browser
+     from painting it when the card flips to lyrics/search. display:none
+     removes the layer outright. The render loop also pauses while flipped. */
+  .cover-stage.flipped .stage-canvas { display: none; }
+  .cover-stage.flipped .stage-glow { opacity: 0 !important; visibility: hidden; }
+
   /* ============== UI OVERLAYS on top of cover ============== */
   .ui-overlay {
     position: absolute; inset: 0;
@@ -251,7 +301,12 @@
     transition: background var(--t-fast), transform var(--t-fast), color var(--t-fast);
   }
   [data-theme="light"] .action { background: rgba(255,255,255,0.85); color: var(--bg-0); }
-  .action:hover { transform: scale(1.08); }
+  .action:hover {
+    transform: scale(1.08);
+    border-color: color-mix(in srgb, var(--primary) 55%, transparent);
+    box-shadow: 0 6px 22px rgba(0,0,0,0.45),
+                0 0 18px color-mix(in srgb, var(--primary) 35%, transparent);
+  }
   .action:active { transform: scale(0.92); }
   .action .material-symbols-outlined { font-size: 24px; transition: color var(--t-fast); }
   .action.liked .material-symbols-outlined {
@@ -346,8 +401,9 @@
   .progress .filled {
     position: absolute; inset: 0 auto 0 0;
     width: 0%;
-    background: #fff;
+    background: linear-gradient(90deg, var(--primary), var(--accent));
     border-radius: var(--r-full);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 55%, transparent);
   }
   [data-theme="light"] .progress .filled { background: var(--bg-0); }
   .progress .thumb {
@@ -355,6 +411,7 @@
     width: 11px; height: 11px;
     background: #fff;
     border-radius: 50%;
+    box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 70%, transparent);
     transform: translate(-50%, -50%) scale(0);
     transition: transform var(--t-fast);
   }
@@ -401,10 +458,11 @@
   .chip:hover { transform: scale(1.04); }
   .chip:active { transform: scale(0.96); }
   .chip[aria-pressed="true"] {
-    background: #fff;
-    color: var(--bg-0);
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    color: #fff;
     border-color: transparent;
     font-weight: 700;
+    box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 40%, transparent);
   }
   [data-theme="light"] .chip[aria-pressed="true"] { background: var(--bg-0); color: #fff; }
 
@@ -683,6 +741,26 @@
   .boot-card h3 { font-family: "DM Serif Display"; font-style: italic; font-size: 22px; margin: 0 0 8px; color: var(--fg); }
   .boot-card p { font-size: 12px; color: var(--fg-2); margin: 0; }
 
+  /* Cinematic vignette over the whole reel for depth */
+  .reel::after {
+    content: "";
+    position: absolute; inset: 0;
+    pointer-events: none;
+    z-index: 4;
+    background: radial-gradient(120% 90% at 50% 38%,
+      transparent 52%, rgba(0,0,0,0.28) 82%, rgba(0,0,0,0.5) 100%);
+  }
+  /* Brand logo soft glow pulse */
+  .brand-logo {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4),
+                0 0 16px color-mix(in srgb, var(--primary) 45%, transparent);
+    animation: brandPulse 4s ease-in-out infinite;
+  }
+  @keyframes brandPulse {
+    0%, 100% { box-shadow: 0 4px 12px rgba(0,0,0,0.4), 0 0 14px color-mix(in srgb, var(--primary) 35%, transparent); }
+    50%      { box-shadow: 0 4px 12px rgba(0,0,0,0.4), 0 0 26px color-mix(in srgb, var(--accent) 55%, transparent); }
+  }
+
   audio { display: none; }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
@@ -709,6 +787,11 @@
     <!-- COVER STAGE — fills full reel, with flip -->
     <div class="cover-stage" id="cover-stage">
       <div class="face front" id="cover">
+        <!-- Ambient radial glow behind the 3D turntable -->
+        <div class="stage-glow" id="stage-glow" aria-hidden="true"></div>
+        <!-- Interactive 3D turntable (Three.js). Audio-reactive, spins with
+             playback, uses the movie poster as the vinyl label. -->
+        <canvas class="stage-canvas" id="three-stage" aria-hidden="true"></canvas>
         <div class="play-indicator" id="play-indicator">
           <span class="material-symbols-outlined" id="play-indicator-icon">play_arrow</span>
         </div>
@@ -1833,6 +1916,350 @@
   });
 
 })();
+</script>
+
+<!-- ============================================================
+     3D TURNTABLE ENGINE — interactive, audio-reactive vinyl.
+     Fully decoupled from the player above: it observes #cover for
+     artwork changes, listens to #audio for play state, and taps the
+     Web Audio graph for the live spectrum. No edits to app logic.
+     Degrades gracefully — if Three.js fails to load, nothing breaks.
+============================================================ -->
+<script type="module">
+try {
+  const THREE = await import('three');
+  initTurntable(THREE);
+
+  function initTurntable(THREE) {
+    const canvas = document.getElementById('three-stage');
+    const audio  = document.getElementById('audio');
+    const coverEl = document.getElementById('cover');
+    const glowEl = document.getElementById('stage-glow');
+    const stageRoot = document.getElementById('cover-stage');
+    if (!canvas || !audio) return;
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    /* ---------- Renderer / scene / camera ---------- */
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+    const CAM = new THREE.Vector3(0, 3.7, 9.7);
+    const LOOK = new THREE.Vector3(0, -0.35, 0);
+    camera.position.copy(CAM);
+    camera.lookAt(LOOK);
+
+    const stage = new THREE.Group();      // everything tilts together (parallax)
+    scene.add(stage);
+
+    /* ---------- Lights ---------- */
+    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+    const key = new THREE.DirectionalLight(0xffffff, 1.15);
+    key.position.set(3.5, 7, 4.5); scene.add(key);
+    const rimA = new THREE.PointLight(0xc4a4ff, 6, 26, 2); rimA.position.set(-4.5, 2.2, 2.5); scene.add(rimA);
+    const rimB = new THREE.PointLight(0xff3b6b, 5, 26, 2); rimB.position.set(4.2, 1.4, -2.5); scene.add(rimB);
+
+    /* ---------- Procedural groove texture ---------- */
+    function grooveTexture() {
+      const s = 1024, c = document.createElement('canvas'); c.width = c.height = s;
+      const x = c.getContext('2d'), cx = s / 2, cy = s / 2;
+      x.fillStyle = '#08070c'; x.fillRect(0, 0, s, s);
+      for (let r = s / 2 - 4; r > 70; r -= 3) {
+        x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2);
+        x.strokeStyle = (r % 6 < 3) ? 'rgba(255,255,255,0.045)' : 'rgba(0,0,0,0.5)';
+        x.lineWidth = 1.2; x.stroke();
+      }
+      // angular sheen — a light sweep that rotates with the disc
+      const g = x.createLinearGradient(0, 0, s, s);
+      g.addColorStop(0, 'rgba(255,255,255,0.14)');
+      g.addColorStop(0.45, 'rgba(255,255,255,0.0)');
+      g.addColorStop(0.55, 'rgba(255,255,255,0.0)');
+      g.addColorStop(1, 'rgba(196,164,255,0.10)');
+      x.globalCompositeOperation = 'lighter'; x.fillStyle = g; x.fillRect(0, 0, s, s);
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+      return t;
+    }
+    function defaultLabel() {
+      const s = 512, c = document.createElement('canvas'); c.width = c.height = s;
+      const x = c.getContext('2d');
+      const g = x.createRadialGradient(s/2, s/2, 20, s/2, s/2, s/2);
+      g.addColorStop(0, '#c4a4ff'); g.addColorStop(0.6, '#7a4fd0'); g.addColorStop(1, '#ff3b6b');
+      x.fillStyle = g; x.fillRect(0, 0, s, s);
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+    }
+
+    /* ---------- Vinyl ---------- */
+    const vinyl = new THREE.Group(); stage.add(vinyl);
+    const DISC_R = 2.3;
+    const disc = new THREE.Mesh(
+      new THREE.CylinderGeometry(DISC_R, DISC_R, 0.07, 96),
+      new THREE.MeshStandardMaterial({ color: 0x0a0a0f, roughness: 0.34, metalness: 0.7 })
+    );
+    vinyl.add(disc);
+    const grooves = new THREE.Mesh(
+      new THREE.CircleGeometry(DISC_R - 0.02, 96),
+      new THREE.MeshStandardMaterial({ map: grooveTexture(), roughness: 0.45, metalness: 0.5 })
+    );
+    grooves.rotation.x = -Math.PI / 2; grooves.position.y = 0.037; vinyl.add(grooves);
+    // also under-side grooves so it reads as a record from below on tilt
+    const groovesB = grooves.clone(); groovesB.rotation.x = Math.PI / 2; groovesB.position.y = -0.037; vinyl.add(groovesB);
+
+    const labelMat = new THREE.MeshStandardMaterial({ map: defaultLabel(), roughness: 0.55, metalness: 0.15, emissive: 0x000000, emissiveIntensity: 0.0 });
+    const label = new THREE.Mesh(new THREE.CircleGeometry(0.82, 64), labelMat);
+    label.rotation.x = -Math.PI / 2; label.position.y = 0.041; vinyl.add(label);
+    // emissive copy of label that we pulse with the music (kept separate so
+    // the base albedo stays correct)
+    labelMat.emissiveMap = labelMat.map;
+
+    const spindle = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.045, 0.045, 0.16, 24),
+      new THREE.MeshStandardMaterial({ color: 0xdedede, roughness: 0.3, metalness: 0.9 })
+    );
+    spindle.position.y = 0.09; vinyl.add(spindle);
+
+    /* ---------- Glow ring (pulses with bass) ---------- */
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xc4a4ff, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending });
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(DISC_R + 0.12, 0.02, 12, 120), ringMat);
+    ring.rotation.x = Math.PI / 2; ring.position.y = 0.02; stage.add(ring);
+
+    /* ---------- EQ ring of bars ---------- */
+    const NUM_BARS = 48;
+    const bars = [];
+    const barGeo = new THREE.BoxGeometry(0.07, 1, 0.07);
+    for (let i = 0; i < NUM_BARS; i++) {
+      const hue = 0.74 - (i / NUM_BARS) * 0.18;          // purple -> pink/gold band
+      const col = new THREE.Color().setHSL(hue % 1, 0.85, 0.62);
+      const m = new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.6, roughness: 0.4 });
+      const bar = new THREE.Mesh(barGeo, m);
+      const a = (i / NUM_BARS) * Math.PI * 2;
+      const r = DISC_R + 0.42;
+      bar.position.set(Math.cos(a) * r, 0.0, Math.sin(a) * r);
+      bar.scale.y = 0.25; bar.position.y = 0.12;
+      bar.userData.h = 0.25;
+      stage.add(bar); bars.push(bar);
+    }
+
+    /* ---------- Tonearm ---------- */
+    const arm = new THREE.Group();
+    arm.position.set(2.45, 0.12, 1.85);
+    const armMetal = new THREE.MeshStandardMaterial({ color: 0xb9b6c4, roughness: 0.3, metalness: 0.85 });
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.24, 0.16, 24), armMetal);
+    arm.add(base);
+    const pivot = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.22, 20), armMetal);
+    pivot.position.y = 0.14; arm.add(pivot);
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 2.6, 16), armMetal);
+    tube.rotation.z = Math.PI / 2; tube.position.set(-1.25, 0.2, 0); arm.add(tube);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.1, 0.12),
+      new THREE.MeshStandardMaterial({ color: 0x222028, roughness: 0.5, metalness: 0.3 }));
+    head.position.set(-2.5, 0.16, 0); arm.add(head);
+    stage.add(arm);
+    const ARM_REST = -0.5;     // swung out, off the record
+    const ARM_PLAY = 0.42;     // needle down over the outer groove
+    let armAngle = ARM_REST;
+
+    /* ---------- Particles (dust motes) ---------- */
+    const PCOUNT = 90;
+    const pPos = new Float32Array(PCOUNT * 3);
+    for (let i = 0; i < PCOUNT; i++) {
+      pPos[i*3]   = (Math.random() - 0.5) * 10;
+      pPos[i*3+1] = Math.random() * 5 - 0.5;
+      pPos[i*3+2] = (Math.random() - 0.5) * 8;
+    }
+    const pGeo = new THREE.BufferGeometry();
+    pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+    const pMat = new THREE.PointsMaterial({ color: 0xd9c8ff, size: 0.045, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
+    const particles = new THREE.Points(pGeo, pMat); scene.add(particles);
+
+    /* ---------- Cover texture + dominant colour ---------- */
+    const loader = new THREE.TextureLoader(); loader.crossOrigin = 'anonymous';
+    let lastCover = '';
+    function applyCover(url) {
+      if (!url || url === lastCover) return;
+      lastCover = url;
+      loader.load(url, (tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+        labelMat.map = tex; labelMat.emissiveMap = tex; labelMat.color.set(0xffffff);
+        labelMat.needsUpdate = true;
+        try { tintFromImage(tex.image); } catch (_) {}
+      }, undefined, () => {});
+    }
+    function tintFromImage(img) {
+      const n = 24, c = document.createElement('canvas'); c.width = c.height = n;
+      const x = c.getContext('2d'); x.drawImage(img, 0, 0, n, n);
+      const d = x.getImageData(0, 0, n, n).data;
+      let r = 0, g = 0, b = 0, k = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        const lum = (d[i] + d[i+1] + d[i+2]) / 3;
+        if (lum < 18 || lum > 245) continue;             // skip near-black/white
+        r += d[i]; g += d[i+1]; b += d[i+2]; k++;
+      }
+      if (!k) return;
+      r = Math.round(r/k); g = Math.round(g/k); b = Math.round(b/k);
+      // lift saturation/brightness a touch so the glow reads
+      const col = new THREE.Color(`rgb(${r},${g},${b})`);
+      const hsl = {}; col.getHSL(hsl);
+      col.setHSL(hsl.h, Math.min(1, hsl.s * 1.3 + 0.1), Math.min(0.72, Math.max(0.45, hsl.l)));
+      const hex = '#' + col.getHexString();
+      document.documentElement.style.setProperty('--glow', hex);
+      rimA.color.copy(col);
+      ringMat.color.copy(col);
+    }
+    // initial (if a cover is already painted) + observe future changes
+    const readCover = () => {
+      const m = /url\(["']?(.*?)["']?\)/.exec(coverEl.style.backgroundImage || '');
+      if (m && m[1]) applyCover(m[1]);
+    };
+    readCover();
+    new MutationObserver(readCover).observe(coverEl, { attributes: true, attributeFilter: ['style'] });
+
+    /* ---------- Web Audio analyser (lazy, on first gesture) ---------- */
+    let analyser = null, freq = null, audioCtx = null, audioWired = false;
+    function wireAudio() {
+      if (audioWired) return; audioWired = true;
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const src = audioCtx.createMediaElementSource(audio);
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 128; analyser.smoothingTimeConstant = 0.8;
+        freq = new Uint8Array(analyser.frequencyBinCount);
+        src.connect(analyser); analyser.connect(audioCtx.destination);
+      } catch (e) { analyser = null; }   // fall back to time-based motion
+    }
+    const resumeCtx = () => { if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); };
+    window.addEventListener('pointerdown', () => { wireAudio(); resumeCtx(); }, { passive: true });
+    audio.addEventListener('play', () => { wireAudio(); resumeCtx(); });
+
+    /* ---------- Play state ---------- */
+    let playing = false;
+    audio.addEventListener('play',  () => { playing = true; });
+    audio.addEventListener('pause', () => { playing = false; });
+    audio.addEventListener('ended', () => { playing = false; });
+
+    /* ---------- Parallax (mouse + gyro) ---------- */
+    let pX = 0, pY = 0, tX = 0, tY = 0;
+    window.addEventListener('pointermove', (e) => {
+      tX = (e.clientX / window.innerWidth - 0.5) * 2;
+      tY = (e.clientY / window.innerHeight - 0.5) * 2;
+    }, { passive: true });
+    window.addEventListener('deviceorientation', (e) => {
+      if (e.gamma == null) return;
+      tX = Math.max(-1, Math.min(1, e.gamma / 35));
+      tY = Math.max(-1, Math.min(1, ((e.beta || 40) - 40) / 35));
+    }, { passive: true });
+
+    /* ---------- Resize ---------- */
+    function resize() {
+      const w = canvas.clientWidth || canvas.offsetWidth || 1;
+      const h = canvas.clientHeight || canvas.offsetHeight || 1;
+      if (!w || !h) return;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h; camera.updateProjectionMatrix();
+    }
+    new ResizeObserver(resize).observe(canvas);
+    resize();
+
+    /* ---------- Render loop ---------- */
+    let spin = 0, spinVel = 0, amp = 0, bass = 0, glowLevel = 0, last = performance.now();
+    function frame(now) {
+      requestAnimationFrame(frame);
+      const dt = Math.min(0.05, (now - last) / 1000); last = now;
+
+      // Skip heavy work when hidden or flipped to lyrics/search (front face off)
+      const hidden = document.hidden || (stageRoot && stageRoot.classList.contains('flipped'));
+      if (hidden) return;
+
+      // --- spectrum ---
+      let targetAmp = 0, targetBass = 0;
+      if (analyser && playing) {
+        analyser.getByteFrequencyData(freq);
+        let sum = 0; for (let i = 0; i < freq.length; i++) sum += freq[i];
+        targetAmp = sum / (freq.length * 255);
+        targetBass = (freq[1] + freq[2] + freq[3] + freq[4]) / (4 * 255);
+      } else if (playing) {
+        // analyser unavailable — gentle synthetic motion so it still "breathes"
+        targetAmp = 0.35 + 0.12 * Math.sin(now / 480);
+        targetBass = 0.4 + 0.25 * Math.abs(Math.sin(now / 360));
+      }
+      amp  += (targetAmp  - amp)  * 0.18;
+      bass += (targetBass - bass) * 0.22;
+
+      // --- vinyl spin (≈33rpm feel; bass nudges it) ---
+      const targetVel = playing ? (2.0 + bass * 1.4) : 0.12;
+      spinVel += (targetVel - spinVel) * (reduceMotion ? 1 : 0.05);
+      spin += spinVel * dt;
+      vinyl.rotation.y = spin;
+      vinyl.position.y = reduceMotion ? 0 : Math.sin(now / 600) * 0.04 + bass * 0.06;
+
+      // --- label emissive pulse ---
+      labelMat.emissiveIntensity = playing ? 0.12 + amp * 0.5 : 0.0;
+      labelMat.emissive.setRGB(amp * 0.6, amp * 0.35, amp * 0.7);
+
+      // --- glow ring ---
+      const ringScale = 1 + bass * 0.12;
+      ring.scale.set(ringScale, ringScale, 1);
+      ringMat.opacity = 0.3 + amp * 0.6;
+
+      // --- EQ bars ---
+      if (!reduceMotion) {
+        for (let i = 0; i < NUM_BARS; i++) {
+          let v;
+          if (analyser && playing) {
+            const bin = 1 + (i % (freq.length - 2));
+            v = (freq[bin] / 255);
+          } else {
+            v = playing ? 0.25 + 0.35 * Math.abs(Math.sin(now / 300 + i * 0.5)) : 0.05;
+          }
+          const h = 0.16 + v * 1.25;
+          const b = bars[i];
+          b.userData.h += (h - b.userData.h) * 0.35;
+          b.scale.y = b.userData.h;
+          b.position.y = b.userData.h / 2;
+          b.material.emissiveIntensity = 0.4 + v * 1.2;
+        }
+      }
+
+      // --- lights react ---
+      rimA.intensity = 4 + amp * 10;
+      rimB.intensity = 3 + bass * 9;
+
+      // --- glow element opacity follows energy ---
+      const gTarget = playing ? 0.5 + amp * 0.5 : 0.45;
+      glowLevel += (gTarget - glowLevel) * 0.1;
+      if (glowEl) glowEl.style.opacity = glowLevel.toFixed(3);
+
+      // --- tonearm ease in/out ---
+      const armTarget = playing ? ARM_PLAY : ARM_REST;
+      armAngle += (armTarget - armAngle) * (reduceMotion ? 1 : 0.06);
+      arm.rotation.y = armAngle;
+
+      // --- particles drift up ---
+      if (!reduceMotion) {
+        const pa = particles.geometry.attributes.position;
+        for (let i = 0; i < PCOUNT; i++) {
+          pa.array[i*3+1] += dt * (0.15 + amp * 0.6);
+          if (pa.array[i*3+1] > 4.5) pa.array[i*3+1] = -0.5;
+        }
+        pa.needsUpdate = true;
+        pMat.opacity = 0.35 + amp * 0.5;
+      }
+
+      // --- parallax ---
+      pX += (tX - pX) * 0.05; pY += (tY - pY) * 0.05;
+      stage.rotation.y = pX * 0.25;
+      stage.rotation.x = pY * 0.12;
+      camera.position.x = CAM.x + pX * 0.7;
+      camera.position.y = CAM.y - pY * 0.5;
+      camera.lookAt(LOOK);
+
+      renderer.render(scene, camera);
+    }
+    requestAnimationFrame(frame);
+  }
+} catch (err) {
+  console.warn('[yadrcha] 3D turntable unavailable:', err);
+}
 </script>
 </body>
 </html>
