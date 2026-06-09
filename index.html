@@ -345,7 +345,7 @@
     100% { transform: translate(var(--dx, 20px), -120px) scale(1.4); opacity: 0; }
   }
 
-  /* META OVERLAY (bottom-left of cover) */
+  /* META OVERLAY (bottom-left of cover) — now-playing strip */
   .meta-overlay {
     position: absolute;
     left: 16px;
@@ -353,10 +353,32 @@
     bottom: 90px;    /* above era chips + progress */
     bottom: max(90px, calc(env(safe-area-inset-bottom, 12px) + 78px));
     color: #fff;
+    display: flex; align-items: flex-end; gap: 13px;
     transition: filter var(--t-med), opacity var(--t-med);
   }
   [data-theme="light"] .meta-overlay { color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.4); }
   .meta-overlay.revealing { filter: blur(8px); opacity: 0.2; }
+  .meta-text { min-width: 0; flex: 1; }
+  /* Crisp movie-poster thumbnail — the album is always clearly visible here,
+     separate from the orb so it never occludes it. */
+  .np-cover {
+    width: 76px; height: 76px;
+    flex-shrink: 0;
+    border-radius: 14px;
+    background: var(--bg-2) center/cover no-repeat;
+    border: 1.5px solid rgba(255,255,255,0.22);
+    box-shadow: 0 8px 22px rgba(0,0,0,0.55),
+                0 0 22px color-mix(in srgb, var(--glow, #c4a4ff) 45%, transparent);
+    opacity: 0; transform: translateY(8px) scale(0.92);
+    transition: opacity var(--t-med), transform var(--t-med);
+  }
+  .np-cover.show { opacity: 1; transform: none; }
+  .np-cover.pop { animation: npPop 0.5s cubic-bezier(.34,1.56,.64,1); }
+  @keyframes npPop {
+    0% { transform: scale(0.86) rotate(-3deg); }
+    60% { transform: scale(1.06) rotate(1deg); }
+    100% { transform: scale(1) rotate(0); }
+  }
   .meta-movie {
     font-size: 11px; font-weight: 700;
     letter-spacing: 1.6px; text-transform: uppercase;
@@ -881,11 +903,14 @@
         </div>
       </div>
 
-      <!-- META OVERLAY (bottom-left) -->
+      <!-- META OVERLAY (bottom-left) — now-playing strip with poster thumbnail -->
       <div class="meta-overlay" id="meta">
-        <div class="meta-movie" id="meta-movie">— Telugu film —</div>
-        <h1 class="meta-title" id="meta-title">Random Telugu hits</h1>
-        <div class="meta-artist" id="meta-artist">Press anywhere to begin</div>
+        <div class="np-cover" id="np-cover" aria-hidden="true"></div>
+        <div class="meta-text">
+          <div class="meta-movie" id="meta-movie">— Telugu film —</div>
+          <h1 class="meta-title" id="meta-title">Random Telugu hits</h1>
+          <div class="meta-artist" id="meta-artist">Press anywhere to begin</div>
+        </div>
       </div>
 
       <!-- PROGRESS BAR (bottom) -->
@@ -1918,347 +1943,261 @@
 })();
 </script>
 
+<!-- Now-playing poster thumbnail: mirror #cover's art into #np-cover so the
+     album is always shown crisply. Standalone (works even if WebGL fails). -->
+<script>
+(function () {
+  var src = document.getElementById('cover'), dst = document.getElementById('np-cover');
+  if (!src || !dst) return;
+  var last = '';
+  function sync() {
+    var bg = src.style.backgroundImage;
+    if (!bg || bg === 'none' || bg === last) return;
+    last = bg;
+    dst.style.backgroundImage = bg;
+    dst.classList.add('show');
+    dst.classList.remove('pop'); void dst.offsetWidth; dst.classList.add('pop');
+  }
+  new MutationObserver(sync).observe(src, { attributes: true, attributeFilter: ['style'] });
+  sync();
+})();
+</script>
+
 <!-- ============================================================
-     3D TURNTABLE ENGINE — interactive, audio-reactive vinyl.
-     Fully decoupled from the player above: it observes #cover for
-     artwork changes, listens to #audio for play state, and taps the
-     Web Audio graph for the live spectrum. No edits to app logic.
-     Degrades gracefully — if Three.js fails to load, nothing breaks.
+     LIVING ORB — interactive, audio-reactive shader visualizer.
+     A noise-displaced energy orb in a void: bass drives pulses and
+     spikes, highs shimmer the surface, a fresnel halo sharpens with
+     loudness, and colour is sampled live from the album art.
+     Fully decoupled from the player: observes #cover for artwork,
+     listens to #audio for play state, taps the Web Audio spectrum.
+     No edits to app logic. Degrades gracefully if WebGL/Three fails.
 ============================================================ -->
 <script type="module">
 try {
   const THREE = await import('three');
-  initTurntable(THREE);
+  initOrb(THREE);
 
-  function initTurntable(THREE) {
+  function initOrb(THREE) {
     const canvas = document.getElementById('three-stage');
-    const audio  = document.getElementById('audio');
+    const audio = document.getElementById('audio');
     const coverEl = document.getElementById('cover');
     const glowEl = document.getElementById('stage-glow');
     const stageRoot = document.getElementById('cover-stage');
     if (!canvas || !audio) return;
     const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    /* ---------- Renderer / scene / camera ---------- */
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
-    const CAM = new THREE.Vector3(0, 3.7, 9.7);
-    const LOOK = new THREE.Vector3(0, -0.35, 0);
-    camera.position.copy(CAM);
-    camera.lookAt(LOOK);
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+    const CAM_FAR = 8.6, CAM_NEAR = 7.7;
+    camera.position.set(0, 0, CAM_FAR);
+    camera.lookAt(0, 0, 0);
 
-    const stage = new THREE.Group();      // everything tilts together (parallax)
-    scene.add(stage);
+    const group = new THREE.Group(); scene.add(group);
 
-    /* ---------- Lights ---------- */
-    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-    const key = new THREE.DirectionalLight(0xffffff, 1.15);
-    key.position.set(3.5, 7, 4.5); scene.add(key);
-    const rimA = new THREE.PointLight(0xc4a4ff, 6, 26, 2); rimA.position.set(-4.5, 2.2, 2.5); scene.add(rimA);
-    const rimB = new THREE.PointLight(0xff3b6b, 5, 26, 2); rimB.position.set(4.2, 1.4, -2.5); scene.add(rimB);
+    /* ---- GLSL simplex noise (Ashima / Stefan Gustavson) ---- */
+    const SNOISE = `
+      vec3 mod289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}
+      vec4 mod289(vec4 x){return x-floor(x*(1.0/289.0))*289.0;}
+      vec4 permute(vec4 x){return mod289(((x*34.0)+1.0)*x);}
+      vec4 taylorInvSqrt(vec4 r){return 1.79284291400159-0.85373472095314*r;}
+      float snoise(vec3 v){
+        const vec2 C=vec2(1.0/6.0,1.0/3.0); const vec4 D=vec4(0.0,0.5,1.0,2.0);
+        vec3 i=floor(v+dot(v,C.yyy)); vec3 x0=v-i+dot(i,C.xxx);
+        vec3 g=step(x0.yzx,x0.xyz); vec3 l=1.0-g; vec3 i1=min(g.xyz,l.zxy); vec3 i2=max(g.xyz,l.zxy);
+        vec3 x1=x0-i1+C.xxx; vec3 x2=x0-i2+C.yyy; vec3 x3=x0-D.yyy;
+        i=mod289(i);
+        vec4 p=permute(permute(permute(i.z+vec4(0.0,i1.z,i2.z,1.0))+i.y+vec4(0.0,i1.y,i2.y,1.0))+i.x+vec4(0.0,i1.x,i2.x,1.0));
+        float n_=0.142857142857; vec3 ns=n_*D.wyz-D.xzx;
+        vec4 j=p-49.0*floor(p*ns.z*ns.z);
+        vec4 x_=floor(j*ns.z); vec4 y_=floor(j-7.0*x_);
+        vec4 x=x_*ns.x+ns.yyyy; vec4 y=y_*ns.x+ns.yyyy; vec4 h=1.0-abs(x)-abs(y);
+        vec4 b0=vec4(x.xy,y.xy); vec4 b1=vec4(x.zw,y.zw);
+        vec4 s0=floor(b0)*2.0+1.0; vec4 s1=floor(b1)*2.0+1.0; vec4 sh=-step(h,vec4(0.0));
+        vec4 a0=b0.xzyw+s0.xzyw*sh.xxyy; vec4 a1=b1.xzyw+s1.xzyw*sh.zzww;
+        vec3 p0=vec3(a0.xy,h.x); vec3 p1=vec3(a0.zw,h.y); vec3 p2=vec3(a1.xy,h.z); vec3 p3=vec3(a1.zw,h.w);
+        vec4 norm=taylorInvSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));
+        p0*=norm.x;p1*=norm.y;p2*=norm.z;p3*=norm.w;
+        vec4 m=max(0.6-vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)),0.0); m=m*m;
+        return 42.0*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
+      }`;
 
-    /* ---------- Procedural groove texture ---------- */
-    function grooveTexture() {
-      const s = 1024, c = document.createElement('canvas'); c.width = c.height = s;
-      const x = c.getContext('2d'), cx = s / 2, cy = s / 2;
-      x.fillStyle = '#08070c'; x.fillRect(0, 0, s, s);
-      for (let r = s / 2 - 4; r > 70; r -= 3) {
-        x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2);
-        x.strokeStyle = (r % 6 < 3) ? 'rgba(255,255,255,0.045)' : 'rgba(0,0,0,0.5)';
-        x.lineWidth = 1.2; x.stroke();
-      }
-      // angular sheen — a light sweep that rotates with the disc
-      const g = x.createLinearGradient(0, 0, s, s);
-      g.addColorStop(0, 'rgba(255,255,255,0.14)');
-      g.addColorStop(0.45, 'rgba(255,255,255,0.0)');
-      g.addColorStop(0.55, 'rgba(255,255,255,0.0)');
-      g.addColorStop(1, 'rgba(196,164,255,0.10)');
-      x.globalCompositeOperation = 'lighter'; x.fillStyle = g; x.fillRect(0, 0, s, s);
-      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
-      return t;
-    }
-    function defaultLabel() {
-      const s = 512, c = document.createElement('canvas'); c.width = c.height = s;
-      const x = c.getContext('2d');
-      const g = x.createRadialGradient(s/2, s/2, 20, s/2, s/2, s/2);
-      g.addColorStop(0, '#c4a4ff'); g.addColorStop(0.6, '#7a4fd0'); g.addColorStop(1, '#ff3b6b');
-      x.fillStyle = g; x.fillRect(0, 0, s, s);
-      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
-    }
+    const uniforms = {
+      uTime: { value: 0 }, uAudio: { value: 0 }, uBass: { value: 0 }, uTreble: { value: 0 },
+      uDistort: { value: 0.22 },
+      uColorA: { value: new THREE.Color(0x2a1556) },
+      uColorB: { value: new THREE.Color(0xc4a4ff) },
+      uColorC: { value: new THREE.Color(0xff3b6b) },
+    };
 
-    /* ---------- Vinyl ---------- */
-    const vinyl = new THREE.Group(); stage.add(vinyl);
-    const DISC_R = 2.3;
-    const disc = new THREE.Mesh(
-      new THREE.CylinderGeometry(DISC_R, DISC_R, 0.07, 96),
-      new THREE.MeshStandardMaterial({ color: 0x0a0a0f, roughness: 0.34, metalness: 0.7 })
-    );
-    vinyl.add(disc);
-    const grooves = new THREE.Mesh(
-      new THREE.CircleGeometry(DISC_R - 0.02, 96),
-      new THREE.MeshStandardMaterial({ map: grooveTexture(), roughness: 0.45, metalness: 0.5 })
-    );
-    grooves.rotation.x = -Math.PI / 2; grooves.position.y = 0.037; vinyl.add(grooves);
-    // also under-side grooves so it reads as a record from below on tilt
-    const groovesB = grooves.clone(); groovesB.rotation.x = Math.PI / 2; groovesB.position.y = -0.037; vinyl.add(groovesB);
+    const vert = SNOISE + `
+      uniform float uTime, uAudio, uBass, uDistort;
+      varying float vN; varying vec3 vNormalV, vViewV;
+      void main(){
+        float t = uTime*0.35;
+        float n = snoise(position*1.1 + vec3(0.0, t, 0.0));
+        n += 0.5*snoise(position*2.3 + vec3(t*1.3, 0.0, 0.0));
+        n += 0.25*snoise(position*4.9 - vec3(0.0, 0.0, t*1.7));
+        float disp = (uDistort + uAudio*0.8 + uBass*0.6) * n;
+        vN = n;
+        vec3 np = position + normal*disp*0.42;
+        vec4 mv = modelViewMatrix*vec4(np, 1.0);
+        vNormalV = normalize(normalMatrix*normal);
+        vViewV = normalize(-mv.xyz);
+        gl_Position = projectionMatrix*mv;
+      }`;
+    const frag = `
+      uniform vec3 uColorA, uColorB, uColorC; uniform float uAudio, uTreble;
+      varying float vN; varying vec3 vNormalV, vViewV;
+      void main(){
+        float fres = pow(1.0-max(dot(vNormalV, vViewV), 0.0), 2.2+uAudio*3.0);
+        vec3 base = mix(uColorA, uColorB, smoothstep(-0.8, 0.9, vN));
+        base = mix(base, uColorC, smoothstep(0.35, 1.0, vN)*(0.35+uTreble*0.65));
+        vec3 col = base + fres*(0.7+uAudio*1.3);
+        gl_FragColor = vec4(col, 1.0);
+      }`;
 
-    const labelMat = new THREE.MeshStandardMaterial({ map: defaultLabel(), roughness: 0.55, metalness: 0.15, emissive: 0x000000, emissiveIntensity: 0.0 });
-    const label = new THREE.Mesh(new THREE.CircleGeometry(0.82, 64), labelMat);
-    label.rotation.x = -Math.PI / 2; label.position.y = 0.041; vinyl.add(label);
-    // emissive copy of label that we pulse with the music (kept separate so
-    // the base albedo stays correct)
-    labelMat.emissiveMap = labelMat.map;
+    const orbMat = new THREE.ShaderMaterial({ uniforms, vertexShader: vert, fragmentShader: frag });
+    const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(1.12, reduceMotion ? 12 : 24), orbMat);
+    group.add(orb);
 
-    const spindle = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.045, 0.045, 0.16, 24),
-      new THREE.MeshStandardMaterial({ color: 0xdedede, roughness: 0.3, metalness: 0.9 })
-    );
-    spindle.position.y = 0.09; vinyl.add(spindle);
+    /* structural wireframe shell — same displacement, additive lines */
+    const wireMat = new THREE.ShaderMaterial({
+      uniforms, vertexShader: vert,
+      fragmentShader: `uniform vec3 uColorB; uniform float uAudio; varying vec3 vNormalV, vViewV;
+        void main(){ float f = pow(1.0-max(dot(vNormalV, vViewV), 0.0), 1.4);
+          gl_FragColor = vec4(uColorB*(0.4+uAudio*1.3), f*0.5); }`,
+      wireframe: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const wire = new THREE.Mesh(new THREE.IcosahedronGeometry(1.18, 8), wireMat);
+    group.add(wire);
 
-    /* ---------- Glow ring (pulses with bass) ---------- */
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0xc4a4ff, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending });
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(DISC_R + 0.12, 0.02, 12, 120), ringMat);
-    ring.rotation.x = Math.PI / 2; ring.position.y = 0.02; stage.add(ring);
+    /* soft fresnel halo */
+    const haloMat = new THREE.ShaderMaterial({
+      uniforms: { uColorB: uniforms.uColorB, uColorC: uniforms.uColorC, uAudio: uniforms.uAudio },
+      vertexShader: `varying vec3 vNormalV, vViewV; void main(){ vec4 mv = modelViewMatrix*vec4(position, 1.0);
+        vNormalV = normalize(normalMatrix*normal); vViewV = normalize(-mv.xyz); gl_Position = projectionMatrix*mv; }`,
+      fragmentShader: `uniform vec3 uColorB, uColorC; uniform float uAudio; varying vec3 vNormalV, vViewV;
+        void main(){ float f = pow(1.0-max(dot(vNormalV, vViewV), 0.0), 3.0);
+          vec3 c = mix(uColorB, uColorC, 0.4); gl_FragColor = vec4(c, f*(0.32+uAudio*0.5)); }`,
+      transparent: true, blending: THREE.AdditiveBlending, side: THREE.BackSide, depthWrite: false,
+    });
+    const halo = new THREE.Mesh(new THREE.IcosahedronGeometry(1.75, 12), haloMat);
+    group.add(halo);
 
-    /* ---------- EQ ring of bars ---------- */
-    const NUM_BARS = 48;
-    const bars = [];
-    const barGeo = new THREE.BoxGeometry(0.07, 1, 0.07);
-    for (let i = 0; i < NUM_BARS; i++) {
-      const hue = 0.74 - (i / NUM_BARS) * 0.18;          // purple -> pink/gold band
-      const col = new THREE.Color().setHSL(hue % 1, 0.85, 0.62);
-      const m = new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.6, roughness: 0.4 });
-      const bar = new THREE.Mesh(barGeo, m);
-      const a = (i / NUM_BARS) * Math.PI * 2;
-      const r = DISC_R + 0.42;
-      bar.position.set(Math.cos(a) * r, 0.0, Math.sin(a) * r);
-      bar.scale.y = 0.25; bar.position.y = 0.12;
-      bar.userData.h = 0.25;
-      stage.add(bar); bars.push(bar);
-    }
-
-    /* ---------- Tonearm ---------- */
-    const arm = new THREE.Group();
-    arm.position.set(2.45, 0.12, 1.85);
-    const armMetal = new THREE.MeshStandardMaterial({ color: 0xb9b6c4, roughness: 0.3, metalness: 0.85 });
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.24, 0.16, 24), armMetal);
-    arm.add(base);
-    const pivot = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.22, 20), armMetal);
-    pivot.position.y = 0.14; arm.add(pivot);
-    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 2.6, 16), armMetal);
-    tube.rotation.z = Math.PI / 2; tube.position.set(-1.25, 0.2, 0); arm.add(tube);
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.1, 0.12),
-      new THREE.MeshStandardMaterial({ color: 0x222028, roughness: 0.5, metalness: 0.3 }));
-    head.position.set(-2.5, 0.16, 0); arm.add(head);
-    stage.add(arm);
-    const ARM_REST = -0.5;     // swung out, off the record
-    const ARM_PLAY = 0.42;     // needle down over the outer groove
-    let armAngle = ARM_REST;
-
-    /* ---------- Particles (dust motes) ---------- */
-    const PCOUNT = 90;
-    const pPos = new Float32Array(PCOUNT * 3);
+    /* drifting particles */
+    const PCOUNT = reduceMotion ? 40 : 170;
+    const pPos = new Float32Array(PCOUNT*3); const pSeed = new Float32Array(PCOUNT);
     for (let i = 0; i < PCOUNT; i++) {
-      pPos[i*3]   = (Math.random() - 0.5) * 10;
-      pPos[i*3+1] = Math.random() * 5 - 0.5;
-      pPos[i*3+2] = (Math.random() - 0.5) * 8;
+      const r = 1.8+Math.random()*2.4, th = Math.random()*Math.PI*2, ph = Math.acos(2*Math.random()-1);
+      pPos[i*3] = r*Math.sin(ph)*Math.cos(th); pPos[i*3+1] = r*Math.sin(ph)*Math.sin(th); pPos[i*3+2] = r*Math.cos(ph);
+      pSeed[i] = Math.random();
     }
-    const pGeo = new THREE.BufferGeometry();
-    pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
-    const pMat = new THREE.PointsMaterial({ color: 0xd9c8ff, size: 0.045, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
+    const pGeo = new THREE.BufferGeometry(); pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+    const pMat = new THREE.PointsMaterial({ color: 0xd9c8ff, size: 0.03, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false });
     const particles = new THREE.Points(pGeo, pMat); scene.add(particles);
 
-    /* ---------- Cover texture + dominant colour ---------- */
-    const loader = new THREE.TextureLoader(); loader.crossOrigin = 'anonymous';
-    let lastCover = '';
+    /* ---- cover-driven colour palette (orb tints to the poster's tone;
+       the poster itself is shown crisply in the now-playing thumbnail) ---- */
+    const loader = new THREE.TextureLoader(); loader.crossOrigin = 'anonymous'; let lastCover = '';
     function applyCover(url) {
-      if (!url || url === lastCover) return;
-      lastCover = url;
-      loader.load(url, (tex) => {
-        tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
-        labelMat.map = tex; labelMat.emissiveMap = tex; labelMat.color.set(0xffffff);
-        labelMat.needsUpdate = true;
-        try { tintFromImage(tex.image); } catch (_) {}
-      }, undefined, () => {});
+      if (!url || url === lastCover) return; lastCover = url;
+      loader.load(url, (tex) => { try { tintFromImage(tex.image); } catch (_) {} }, undefined, () => {});
     }
     function tintFromImage(img) {
-      const n = 24, c = document.createElement('canvas'); c.width = c.height = n;
+      const n = 20, c = document.createElement('canvas'); c.width = c.height = n;
       const x = c.getContext('2d'); x.drawImage(img, 0, 0, n, n);
-      const d = x.getImageData(0, 0, n, n).data;
-      let r = 0, g = 0, b = 0, k = 0;
+      const d = x.getImageData(0, 0, n, n).data; let r = 0, g = 0, b = 0, k = 0, br = 0, bg = 0, bb = 0, maxL = 0;
       for (let i = 0; i < d.length; i += 4) {
-        const lum = (d[i] + d[i+1] + d[i+2]) / 3;
-        if (lum < 18 || lum > 245) continue;             // skip near-black/white
+        const lum = (d[i]+d[i+1]+d[i+2])/3; if (lum < 14 || lum > 248) continue;
         r += d[i]; g += d[i+1]; b += d[i+2]; k++;
+        if (lum > maxL) { maxL = lum; br = d[i]; bg = d[i+1]; bb = d[i+2]; }
       }
-      if (!k) return;
-      r = Math.round(r/k); g = Math.round(g/k); b = Math.round(b/k);
-      // lift saturation/brightness a touch so the glow reads
-      const col = new THREE.Color(`rgb(${r},${g},${b})`);
-      const hsl = {}; col.getHSL(hsl);
-      col.setHSL(hsl.h, Math.min(1, hsl.s * 1.3 + 0.1), Math.min(0.72, Math.max(0.45, hsl.l)));
-      const hex = '#' + col.getHexString();
-      document.documentElement.style.setProperty('--glow', hex);
-      rimA.color.copy(col);
-      ringMat.color.copy(col);
+      if (!k) return; r /= k; g /= k; b /= k;
+      const mid = new THREE.Color(`rgb(${r|0},${g|0},${b|0})`); const hsl = {}; mid.getHSL(hsl);
+      const dark = new THREE.Color().setHSL(hsl.h, Math.min(1, hsl.s*1.2+0.1), Math.max(0.1, hsl.l*0.38));
+      const bright = new THREE.Color().setHSL((hsl.h+0.02)%1, Math.min(1, hsl.s*1.15+0.2), Math.min(0.72, Math.max(0.5, hsl.l*1.3)));
+      const accent = new THREE.Color(`rgb(${br},${bg},${bb})`); const ah = {}; accent.getHSL(ah);
+      accent.setHSL((ah.h+0.5)%1, Math.min(1, ah.s+0.25), 0.62); // complementary pop
+      uniforms.uColorA.value.copy(dark); uniforms.uColorB.value.copy(bright); uniforms.uColorC.value.copy(accent);
+      pMat.color.copy(bright);
+      document.documentElement.style.setProperty('--glow', '#'+bright.getHexString());
     }
-    // initial (if a cover is already painted) + observe future changes
-    const readCover = () => {
-      const m = /url\(["']?(.*?)["']?\)/.exec(coverEl.style.backgroundImage || '');
-      if (m && m[1]) applyCover(m[1]);
-    };
+    const readCover = () => { const m = /url\(["']?(.*?)["']?\)/.exec(coverEl.style.backgroundImage || ''); if (m && m[1]) applyCover(m[1]); };
     readCover();
     new MutationObserver(readCover).observe(coverEl, { attributes: true, attributeFilter: ['style'] });
 
-    /* ---------- Web Audio analyser (lazy, on first gesture) ---------- */
-    let analyser = null, freq = null, audioCtx = null, audioWired = false;
+    /* ---- Web Audio analyser (lazy, on first gesture) ---- */
+    let analyser = null, freq = null, audioCtx = null, wired = false;
     function wireAudio() {
-      if (audioWired) return; audioWired = true;
+      if (wired) return; wired = true;
       try {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const src = audioCtx.createMediaElementSource(audio);
         analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 128; analyser.smoothingTimeConstant = 0.8;
+        analyser.fftSize = 512; analyser.smoothingTimeConstant = 0.82;
         freq = new Uint8Array(analyser.frequencyBinCount);
         src.connect(analyser); analyser.connect(audioCtx.destination);
-      } catch (e) { analyser = null; }   // fall back to time-based motion
+      } catch (e) { analyser = null; }
     }
-    const resumeCtx = () => { if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); };
-    window.addEventListener('pointerdown', () => { wireAudio(); resumeCtx(); }, { passive: true });
-    audio.addEventListener('play', () => { wireAudio(); resumeCtx(); });
+    const resume = () => { if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); };
+    window.addEventListener('pointerdown', () => { wireAudio(); resume(); }, { passive: true });
+    audio.addEventListener('play', () => { wireAudio(); resume(); });
 
-    /* ---------- Play state ---------- */
     let playing = false;
-    audio.addEventListener('play',  () => { playing = true; });
+    audio.addEventListener('play', () => { playing = true; });
     audio.addEventListener('pause', () => { playing = false; });
     audio.addEventListener('ended', () => { playing = false; });
 
-    /* ---------- Parallax (mouse + gyro) ---------- */
+    /* ---- parallax ---- */
     let pX = 0, pY = 0, tX = 0, tY = 0;
-    window.addEventListener('pointermove', (e) => {
-      tX = (e.clientX / window.innerWidth - 0.5) * 2;
-      tY = (e.clientY / window.innerHeight - 0.5) * 2;
-    }, { passive: true });
-    window.addEventListener('deviceorientation', (e) => {
-      if (e.gamma == null) return;
-      tX = Math.max(-1, Math.min(1, e.gamma / 35));
-      tY = Math.max(-1, Math.min(1, ((e.beta || 40) - 40) / 35));
-    }, { passive: true });
+    window.addEventListener('pointermove', (e) => { tX = (e.clientX/window.innerWidth-0.5)*2; tY = (e.clientY/window.innerHeight-0.5)*2; }, { passive: true });
+    window.addEventListener('deviceorientation', (e) => { if (e.gamma == null) return; tX = Math.max(-1, Math.min(1, e.gamma/35)); tY = Math.max(-1, Math.min(1, ((e.beta||40)-40)/35)); }, { passive: true });
 
-    /* ---------- Resize ---------- */
-    function resize() {
-      const w = canvas.clientWidth || canvas.offsetWidth || 1;
-      const h = canvas.clientHeight || canvas.offsetHeight || 1;
-      if (!w || !h) return;
-      renderer.setSize(w, h, false);
-      camera.aspect = w / h; camera.updateProjectionMatrix();
-    }
-    new ResizeObserver(resize).observe(canvas);
-    resize();
+    function resize() { const w = canvas.clientWidth || 1, h = canvas.clientHeight || 1; if (!w || !h) return; renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix(); }
+    new ResizeObserver(resize).observe(canvas); resize();
 
-    /* ---------- Render loop ---------- */
-    let spin = 0, spinVel = 0, amp = 0, bass = 0, glowLevel = 0, last = performance.now();
+    let amp = 0, bass = 0, treb = 0, camZ = CAM_FAR, last = performance.now();
     function frame(now) {
       requestAnimationFrame(frame);
-      const dt = Math.min(0.05, (now - last) / 1000); last = now;
-
-      // Skip heavy work when hidden or flipped to lyrics/search (front face off)
-      const hidden = document.hidden || (stageRoot && stageRoot.classList.contains('flipped'));
-      if (hidden) return;
-
-      // --- spectrum ---
-      let targetAmp = 0, targetBass = 0;
+      const dt = Math.min(0.05, (now-last)/1000); last = now;
+      if (document.hidden || (stageRoot && stageRoot.classList.contains('flipped'))) return;
+      let tA = 0, tB = 0, tT = 0;
       if (analyser && playing) {
-        analyser.getByteFrequencyData(freq);
-        let sum = 0; for (let i = 0; i < freq.length; i++) sum += freq[i];
-        targetAmp = sum / (freq.length * 255);
-        targetBass = (freq[1] + freq[2] + freq[3] + freq[4]) / (4 * 255);
-      } else if (playing) {
-        // analyser unavailable — gentle synthetic motion so it still "breathes"
-        targetAmp = 0.35 + 0.12 * Math.sin(now / 480);
-        targetBass = 0.4 + 0.25 * Math.abs(Math.sin(now / 360));
-      }
-      amp  += (targetAmp  - amp)  * 0.18;
-      bass += (targetBass - bass) * 0.22;
-
-      // --- vinyl spin (≈33rpm feel; bass nudges it) ---
-      const targetVel = playing ? (2.0 + bass * 1.4) : 0.12;
-      spinVel += (targetVel - spinVel) * (reduceMotion ? 1 : 0.05);
-      spin += spinVel * dt;
-      vinyl.rotation.y = spin;
-      vinyl.position.y = reduceMotion ? 0 : Math.sin(now / 600) * 0.04 + bass * 0.06;
-
-      // --- label emissive pulse ---
-      labelMat.emissiveIntensity = playing ? 0.12 + amp * 0.5 : 0.0;
-      labelMat.emissive.setRGB(amp * 0.6, amp * 0.35, amp * 0.7);
-
-      // --- glow ring ---
-      const ringScale = 1 + bass * 0.12;
-      ring.scale.set(ringScale, ringScale, 1);
-      ringMat.opacity = 0.3 + amp * 0.6;
-
-      // --- EQ bars ---
-      if (!reduceMotion) {
-        for (let i = 0; i < NUM_BARS; i++) {
-          let v;
-          if (analyser && playing) {
-            const bin = 1 + (i % (freq.length - 2));
-            v = (freq[bin] / 255);
-          } else {
-            v = playing ? 0.25 + 0.35 * Math.abs(Math.sin(now / 300 + i * 0.5)) : 0.05;
-          }
-          const h = 0.16 + v * 1.25;
-          const b = bars[i];
-          b.userData.h += (h - b.userData.h) * 0.35;
-          b.scale.y = b.userData.h;
-          b.position.y = b.userData.h / 2;
-          b.material.emissiveIntensity = 0.4 + v * 1.2;
-        }
-      }
-
-      // --- lights react ---
-      rimA.intensity = 4 + amp * 10;
-      rimB.intensity = 3 + bass * 9;
-
-      // --- glow element opacity follows energy ---
-      const gTarget = playing ? 0.5 + amp * 0.5 : 0.45;
-      glowLevel += (gTarget - glowLevel) * 0.1;
-      if (glowEl) glowEl.style.opacity = glowLevel.toFixed(3);
-
-      // --- tonearm ease in/out ---
-      const armTarget = playing ? ARM_PLAY : ARM_REST;
-      armAngle += (armTarget - armAngle) * (reduceMotion ? 1 : 0.06);
-      arm.rotation.y = armAngle;
-
-      // --- particles drift up ---
+        analyser.getByteFrequencyData(freq); const n = freq.length;
+        let s = 0; for (let i = 0; i < n; i++) s += freq[i]; tA = s/(n*255);
+        let lb = 0; for (let i = 1; i <= 6; i++) lb += freq[i]; tB = lb/(6*255);
+        let ht = 0, c = 0; for (let i = (n*0.6)|0; i < n; i++) { ht += freq[i]; c++; } tT = c ? ht/(c*255) : 0;
+      } else if (playing) { tA = 0.32+0.1*Math.sin(now/500); tB = 0.4+0.2*Math.abs(Math.sin(now/350)); tT = 0.2; }
+      amp += (tA-amp)*0.15; bass += (tB-bass)*0.2; treb += (tT-treb)*0.18;
+      uniforms.uTime.value = now/1000;
+      uniforms.uAudio.value = amp; uniforms.uBass.value = bass; uniforms.uTreble.value = treb;
+      const spin = (playing ? 0.12 : 0.04) + bass*0.15;
+      group.rotation.y += spin*dt*(reduceMotion ? 0.2 : 1);
+      group.rotation.x = Math.sin(now/4000)*0.1;
+      group.scale.setScalar(1+bass*0.08);
+      if (glowEl) glowEl.style.opacity = (playing ? 0.5+amp*0.55 : 0.4).toFixed(3);
       if (!reduceMotion) {
         const pa = particles.geometry.attributes.position;
         for (let i = 0; i < PCOUNT; i++) {
-          pa.array[i*3+1] += dt * (0.15 + amp * 0.6);
-          if (pa.array[i*3+1] > 4.5) pa.array[i*3+1] = -0.5;
+          const a = now*0.0001*(0.5+pSeed[i]);
+          pa.array[i*3]   += Math.sin(a+pSeed[i]*6.28)*0.0009;
+          pa.array[i*3+2] += Math.cos(a+pSeed[i]*6.28)*0.0009;
         }
-        pa.needsUpdate = true;
-        pMat.opacity = 0.35 + amp * 0.5;
+        pa.needsUpdate = true; pMat.opacity = 0.4+amp*0.5; particles.rotation.y += 0.02*dt;
       }
-
-      // --- parallax ---
-      pX += (tX - pX) * 0.05; pY += (tY - pY) * 0.05;
-      stage.rotation.y = pX * 0.25;
-      stage.rotation.x = pY * 0.12;
-      camera.position.x = CAM.x + pX * 0.7;
-      camera.position.y = CAM.y - pY * 0.5;
-      camera.lookAt(LOOK);
-
+      camZ += ((playing ? CAM_NEAR : CAM_FAR)-camZ)*0.04;
+      pX += (tX-pX)*0.05; pY += (tY-pY)*0.05;
+      camera.position.set(pX*0.5, -pY*0.4, camZ); camera.lookAt(0, 0, 0);
       renderer.render(scene, camera);
     }
     requestAnimationFrame(frame);
   }
 } catch (err) {
-  console.warn('[yadrcha] 3D turntable unavailable:', err);
+  console.warn('[yadrcha] orb visualizer unavailable:', err);
 }
 </script>
 </body>

@@ -8,11 +8,14 @@ A one-tap shuffle player for random Telugu film music — old to latest. Press t
 
 - **One-tap shuffle** — single big button, lean-back radio model
 - **Phone-frame UI** on desktop, full-screen on mobile
-- **Interactive 3D turntable** (Three.js) — a real spinning vinyl with the
-  movie poster as its label, a tracking tonearm, and an audio-reactive EQ
-  halo + glow that pulses to the live spectrum (Web Audio). The ambient glow
-  auto-tints to each cover's dominant colour. Reacts to mouse / device tilt.
-  Degrades gracefully if WebGL/Three.js is unavailable.
+- **Living Orb visualizer** (Three.js) — a noise-displaced energy orb in a
+  void that morphs and pulses to the live audio spectrum (Web Audio): bass
+  drives the pulse, highs shimmer the surface, and a fresnel halo sharpens
+  with loudness. The orb + ambient glow auto-tint to each cover's dominant
+  colour. Reacts to mouse / device tilt. Degrades gracefully if WebGL/Three.js
+  is unavailable.
+- **Now-playing poster** — the movie album art is shown crisply in the
+  bottom-left strip, with a glowing frame that pops on each track change.
 - **Era dial** — All / Vintage / 90s / 2000s / Latest (filtered by real release year)
 - **Time-of-day mood** — auto-shifts vibe (morning ragas → sunset melodies → late-night chill)
 - **Mystery reveal** — title hidden until song fades in
