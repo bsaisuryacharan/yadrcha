@@ -589,33 +589,64 @@ def main() -> int:
     print(f'Album expansion: {albums_done} albums, +{album_expansion_added} songs '
           f'(total candidates: {len(candidates)})')
 
-    # 3. Fetch full details (with encrypted_media_url) in parallel.
-    # Candidates that already carry encrypted_media_url (from search /album
-    # expansion) need NO extra API call — sort those first so we bank the
-    # cheap wins before spending time on per-song detail lookups. Cap at
-    # MAX_DETAILS; the per-worker budget guard drains the pool fast once the
-    # clock runs out.
+    # 3. Classify every candidate first — is_film_song/language/decrypt are
+    # pure in-memory checks, no network call, for any candidate that already
+    # carries encrypted_media_url + language (that's virtually all of them;
+    # search and album-expansion results both embed these fields).
+    #
+    # Truncating to MAX_DETAILS *before* classifying (the old behaviour) let
+    # whichever candidates happened to be discovered first — always the
+    # search-phase ones, since search alone regularly finds ~900 candidates
+    # and gets inserted into `candidates` before album expansion — fill the
+    # entire budget. Search results are heavily diluted with non-Telugu and
+    # non-film hits (broad queries like "telugu hits" surface a lot of
+    # noise), so the truncated slice was ~97% doomed before a single byte of
+    # network I/O, while the much cleaner album-expansion candidates (real
+    # tracks off movie soundtracks already verified via search) never got a
+    # chance to be tried at all.
+    #
+    # Classifying the full pool first costs nothing (no network), so it
+    # can't blow the time budget — only the genuinely-incomplete candidates
+    # (missing encrypted_media_url/language) need a real API call, and only
+    # THAT path is capped at MAX_DETAILS.
     all_candidates = list(candidates.values())
-    all_candidates.sort(key=lambda m: 0 if m.get('encrypted_media_url') else 1)
-    todo = all_candidates[:MAX_DETAILS]
-    print(f'Fetching details for {len(todo)} songs (4 parallel workers)...')
+    normalized = []
+    incomplete = []
+    for meta in all_candidates:
+        if meta.get('encrypted_media_url') and meta.get('language'):
+            n = normalize_detail(meta)
+            if n:
+                normalized.append(n)
+            # else: correctly rejected (wrong language / not a film song /
+            # decrypt failed) — a full detail lookup returns the same fields
+            # and would be rejected identically, so don't waste an API call.
+        else:
+            incomplete.append(meta)
+
+    print(f'Classified {len(all_candidates)} candidates for free: '
+          f'{len(normalized)} qualify, {len(incomplete)} need a detail lookup')
 
     save_lock = Lock()
     found = 0
-    failed = 0
+    failed = len(all_candidates) - len(incomplete) - len(normalized)
     completed = 0
+
+    for n in normalized:
+        by_id[n['i']] = n
+        found += 1
+
+    # Bank the free wins immediately so they survive even if the network
+    # fallback phase below runs out of time or errors out.
+    save_catalog({'version': 2, 'songs': list(by_id.values())})
+
+    todo = incomplete[:MAX_DETAILS]
+    print(f'Fetching details for {len(todo)} incomplete songs (4 parallel workers)...')
 
     def worker(meta):
         # Once we cross 80% of the budget, stop issuing new network work so
         # the executor drains quickly and we reach save+commit in time.
         if over_budget(0.80):
             return None
-        # If candidate (e.g. from album expansion) already has the
-        # encrypted_media_url, normalize directly — saves an API call.
-        if meta.get('encrypted_media_url') and meta.get('language'):
-            n = normalize_detail(meta)
-            if n:
-                return n
         sid = meta.get('id')
         if not sid:
             return None
