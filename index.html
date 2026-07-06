@@ -964,6 +964,10 @@
   const CACHE_TTL = 24 * 60 * 60 * 1000;
   const HISTORY_KEY = 'yadrcha.history.v1';
   const HISTORY_MAX = 80;
+  // Long-term memory of every song already served, so the shuffle can prefer
+  // never-heard songs and surface fresh material each day instead of recycling
+  // the same popular rotation (history alone only covers the last 30 plays).
+  const HEARD_KEY = 'yadrcha.heard.v1';
   const THEME_KEY = 'yadrcha.theme';
   const LYRICS_CACHE_PREFIX = 'yadrcha.lyrics.';
   const LYRICS_CACHE_TTL = 30 * 24 * 60 * 60 * 1000;
@@ -995,6 +999,7 @@
     catalog: [],
     current: null,
     history: JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'),
+    heard: new Set(JSON.parse(localStorage.getItem(HEARD_KEY) || '[]')),
     era: 'all',
     isPlaying: false,
     isMystery: false,
@@ -1011,6 +1016,17 @@
     state.history.push(id);
     if (state.history.length > HISTORY_MAX) state.history = state.history.slice(-HISTORY_MAX);
     try { localStorage.setItem(HISTORY_KEY, JSON.stringify(state.history)); } catch (_) {}
+  }
+  // Record that a song has been served so future shuffles can skip it until the
+  // fresh pool runs low. Persist as a plain id array (~100KB at full catalog).
+  function markHeard(id) {
+    if (!id || state.heard.has(id)) return;
+    state.heard.add(id);
+    try { localStorage.setItem(HEARD_KEY, JSON.stringify([...state.heard])); } catch (_) {}
+  }
+  function resetHeard() {
+    state.heard = new Set();
+    try { localStorage.removeItem(HEARD_KEY); } catch (_) {}
   }
 
   /* UTILS */
@@ -1095,7 +1111,12 @@
   function weightedSample(items, n) {
     if (!items.length) return [];
     const out = []; const used = new Set();
-    const weights = items.map((s) => Math.pow((s.plays || 1) + 1, 0.35));
+    // Gentle popularity bias. Play-counts span 0 → ~100M, so a high exponent
+    // collapses the shuffle onto a handful of mega-hits and buries the ~36% of
+    // the catalog with no play-count (which is where newly-added songs land).
+    // 0.15 keeps well-known songs favoured while still giving the deep catalog
+    // and fresh additions a real chance to surface.
+    const weights = items.map((s) => Math.pow((s.plays || 1) + 1, 0.15));
     const totalWeight = weights.reduce((a, b) => a + b, 0);
     let attempts = 0;
     while (out.length < Math.min(n, items.length) && attempts < n * 5) {
@@ -1148,8 +1169,20 @@
     const ex = new Set(excludeIds || []);
     if (state.current) ex.add(state.current.id);
     state.queue.forEach(s => ex.add(s.id));
-    const fresh = p.filter((s) => !recent.has(s.id) && !ex.has(s.id));
-    return weightedSample(fresh.length ? fresh : p, n);
+
+    // Once the listener has heard nearly the whole pool, wipe the heard-set so
+    // the catalog can cycle again instead of the fresh pool starving.
+    let heardInPool = 0;
+    for (const s of p) if (state.heard.has(s.id)) heardInPool++;
+    if (heardInPool >= p.length - n) resetHeard();
+
+    const avail = p.filter((s) => !recent.has(s.id) && !ex.has(s.id));
+    // Prefer songs never served before so every day surfaces fresh material.
+    // Degrade gracefully: never-heard → any non-recent → the whole pool, so we
+    // always return something even for tiny era pools.
+    const unheard = avail.filter((s) => !state.heard.has(s.id));
+    const poolToUse = unheard.length ? unheard : (avail.length ? avail : p);
+    return weightedSample(poolToUse, n);
   }
   function heuristicPick(candidates) {
     const taste = buildTaste();
@@ -1620,6 +1653,7 @@
     if (!song) return;
     if (state.current) pushHistory(state.current.id);
     state.current = song;
+    markHeard(song.id);
     const cover = $('cover');
     cover.classList.remove('spin-burst'); void cover.offsetWidth; cover.classList.add('spin-burst');
     state.isMystery = !!opts.mystery;
