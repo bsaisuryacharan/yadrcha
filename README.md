@@ -87,7 +87,7 @@ Run it by hand with `python scripts/catalog_tools.py`.
 
 ### Files
 
-- `catalog.json` holds metadata only: 2.6 MB, about 0.75 MB gzipped, versus
+- `catalog.json` holds metadata only: 2.5 MB, about 0.7 MB gzipped, versus
   the previous 16 MB. CDN prefixes are stripped.
 - `lyrics/00.json` … `lyrics/63.json` are synced-lyrics shards. The app only
   fetches one when you open lyrics (shard = FNV-1a(song id) % 64).

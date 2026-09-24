@@ -37,7 +37,8 @@ export const isAllFilter = (f) => !f || (f.kind === 'era' && f.id === 'all');
 const DIGRAPHS = [['th', 't'], ['dh', 'd'], ['bh', 'b'], ['kh', 'k'], ['gh', 'g'], ['ph', 'f'], ['sh', 's'],
   ['ch', 'c'], ['jh', 'j'], ['ee', 'i'], ['oo', 'u'], ['w', 'v'], ['z', 'j'], ['q', 'k'], ['x', 'ks']];
 export function mkey(s) {
-  s = String(s || '').toLowerCase().replace(/\([^)]*\)|\[[^\]]*\]/g, ' ').replace(/[^a-z0-9]/g, '');
+  s = String(s || '').toLowerCase().replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
+    .replace(/\s*-\s*(?:telugu|tamil|hindi|kannada|malayalam)\s*$/, '').replace(/[^a-z0-9]/g, '');
   for (const [a, b] of DIGRAPHS) s = s.split(a).join(b);
   return s.replace(/h/g, '').replace(/(.)\1+/g, '$1');
 }

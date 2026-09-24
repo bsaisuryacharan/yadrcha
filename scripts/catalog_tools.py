@@ -22,7 +22,7 @@ What it does
    film's own album.
 3. ALBUM IDS (`b`) so the app can group a film's soundtrack reliably.
 4. OUTPUT SPLIT for mobile: catalog.json holds metadata only (CDN prefixes
-   stripped, ~4MB raw / ~1MB gzipped) and synced lyrics live in 64 shards
+   stripped, ~2.5MB raw / ~0.7MB gzipped) and synced lyrics live in 64 shards
    under lyrics/, fetched only when a song's lyrics are opened.
 
 Catalog row keys (v3):
@@ -69,6 +69,7 @@ def mkey(s: str | None) -> str:
     'Swathi Muthyam' == 'Swati Mutyam', 'S.P. Balasubrahmanyam' ==
     'S P Balasubramanyam'."""
     s = _PAREN_RE.sub(' ', (s or '').lower())
+    s = re.sub(r'\s*-\s*(?:telugu|tamil|hindi|kannada|malayalam)\s*$', '', s)
     s = re.sub(r'[^a-z0-9]', '', s)
     for a, b in _DIGRAPHS:
         s = s.replace(a, b)
@@ -131,7 +132,17 @@ COMPILATION_RE = re.compile(
     r'sthuthi|non ?-? ?film|carnatic|nursery|rhymes|fables|kids|lullab(?:y|ies)|'
     r'party|workout|lofi|remix(?:es)?|reprise|unplugged|cover songs?|karaoke|'
     r'duet|pro max|gorgeous|music of love|winds & melody|romantic kings|cine gola|'
-    r'december season|brahmotsav\w*|concert)\b',
+    r'december season|brahmotsav\w*|concert|'
+    # classical / dance recitals
+    r'krithis?|kritis?|keerthanalu|sankeerthan\w*|t?h?yagaraja|annamach\w*|raagam|'
+    r'bharath?a?anatyam|swararchana|nrithyopasana|noopuranadham|gems of|'
+    # DJ remixes, lo-fi, folk, stage
+    r'mix|chill ?trap|reggaeton|lo ?-?fi|lofis|synthwave|folk songs?|oggu katha|stage play|'
+    # devotional / Christian collections, star anthologies, misc.
+    r'ganapathy|ekadantaya|bhagawadh? geetha|jai shri ram|yesanna|yesey|prabhu|translation|'
+    r'nightingale|magic of|dance with|dance dynamite|fantastic 9|youth stars|golden years|'
+    r'swarasudha|icon star|love failure|propose day|classic marvel|way to peace|glimpse|'
+    r'live at|vibes?|vol(?:ume)?\.? ?-? ?\d+|(?<!99 )songs)\b',
     re.IGNORECASE,
 )
 # Background scores, OSTs, dialogue tracks and instrumental covers: no
@@ -139,7 +150,8 @@ COMPILATION_RE = re.compile(
 NON_SONG_RE = re.compile(
     r'background score|\bbgm\b|\bost\b|\bost[’\']?s\b|original sound tracks?\b|theme music|'
     r'original score|bg score|\binstrumental\b|\binterludes?\b|\b(?:dialogues?|dailogues?|'
-    r'dialouges?|dialogs?)\b|\bviolin\b|\bveena\b|\bflute\b|\bsaxophone\b|\bpiano\b',
+    r'dialouges?|dialogs?)\b|\bviolin\b|\bveena\b|\bflute\b|\bsaxophone\b|\bpiano\b|'
+    r'\bremix(?:es)?\b|\blo-?fi\b|\bmashup\b|\breggaeton\b|\b\w+ mix\)?$',
     re.IGNORECASE,
 )
 _YEAR_TAGGED_RE = re.compile(r'\b(?:19|20)\d{2}\b')
