@@ -16,7 +16,10 @@ Pipeline per song:
 2. song.getDetails      -> {encrypted_media_url, duration, ...}
 3. DES-ECB decrypt      -> https://aac.saavncdn.com/.../<id>_160.mp4 (full song)
 
-Daily workflow re-runs this with dedupe — catalog grows over time.
+Daily workflow re-runs this with dedupe — catalog grows over time. Every
+run also mines a rotating slice of film years plus JioSaavn's new-releases
+feed, then hands the result to catalog_tools.repair() (year repair, dedupe,
+album ids) and catalog_tools.save_catalog() (catalog.json + lyrics shards).
 """
 from __future__ import annotations
 
@@ -33,6 +36,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import catalog_tools  # noqa: E402
 
 try:
     import requests
@@ -90,7 +96,24 @@ QUERIES = [
     'new telugu songs', 'telugu chartbusters', 'telugu top hits',
 ]
 
-CATALOG_PATH = Path('catalog.json')
+# Year sweep — every day a different slice of film years gets its own
+# searches, so over a few weeks every year from 1955 to today is mined
+# (not just whatever the broad queries above happen to surface). This is
+# what keeps each era's pool growing and the daily shuffle fresh.
+YEARS_PER_DAY = int(os.environ.get('YEARS_PER_DAY', '8'))
+
+
+def year_sweep_queries(today: datetime) -> list[str]:
+    years = list(range(1955, today.year + 1))
+    day = today.toordinal()
+    picked = [years[(day * YEARS_PER_DAY + k) % len(years)] for k in range(YEARS_PER_DAY)]
+    # Always include the current and previous year — new releases matter most.
+    picked += [today.year, today.year - 1]
+    out = []
+    for y in dict.fromkeys(picked):
+        out += [f'telugu {y} movie songs', f'{y} telugu film songs']
+    return out
+
 MAX_DETAILS = int(os.environ.get('MAX_DETAILS', '600'))
 
 # --- Run budgeting -------------------------------------------------------
@@ -255,6 +278,55 @@ def album_songs(album_id: str) -> list[dict]:
     return res.get('songs') or res.get('list') or []
 
 
+def new_release_album_ids() -> list[str]:
+    """Latest Telugu albums from JioSaavn's new-releases feed. Best effort —
+    the endpoint is undocumented, so any shape change just yields []."""
+    ids: list[str] = []
+    for p in (1, 2):
+        res = jio_get('content.getAlbums', {'n': '50', 'p': str(p), 'language': 'telugu'},
+                      max_attempts=2)
+        items = (res or {}).get('data') or (res or {}).get('results') or []
+        for a in items if isinstance(items, list) else []:
+            if (a.get('language') or 'telugu').lower() != 'telugu':
+                continue
+            aid = a.get('albumid') or a.get('id')
+            if aid:
+                ids.append(str(aid))
+    return ids
+
+
+WIKIDATA_QUERY = '''
+SELECT (GROUP_CONCAT(?r; separator="|") AS ?all) WHERE {
+  SELECT DISTINCT ?r WHERE {
+    ?f wdt:P31 wd:Q11424; wdt:P364 wd:Q8097; wdt:P577 ?d.
+    { ?f rdfs:label ?l } UNION { ?f skos:altLabel ?l }
+    FILTER(LANG(?l)="en")
+    BIND(CONCAT(STR(?l),"~",STR(YEAR(?d))) AS ?r)
+  }
+}'''
+
+
+def refresh_film_years() -> None:
+    """Pull Telugu film release years from Wikidata (the year-repair
+    ground truth). One cheap query; failure just keeps the cached file."""
+    try:
+        r = requests.get('https://query.wikidata.org/sparql',
+                         params={'query': WIKIDATA_QUERY, 'format': 'json'},
+                         headers={'User-Agent': 'yadrcha-catalog/2.0 (github.com/bsaisuryacharan/yadrcha)'},
+                         timeout=90)
+        r.raise_for_status()
+        blob = r.json()['results']['bindings'][0]['all']['value']
+        films: dict[str, set[int]] = {}
+        for row in blob.split('|'):
+            title, _, year = row.rpartition('~')
+            if title and year.isdigit():
+                films.setdefault(title.strip(), set()).add(int(year))
+        catalog_tools.save_film_years({k: sorted(v) for k, v in films.items()})
+        print(f'Wikidata: {len(films)} Telugu film titles')
+    except Exception as e:
+        print(f'  ! Wikidata refresh skipped: {e}', file=sys.stderr)
+
+
 # ---------- URL decryption ----------
 
 def decrypt_media_url(encrypted_b64: str) -> str | None:
@@ -321,36 +393,9 @@ NON_FILM_TERMS = {
     'remix dj', 'cover song', 'unplugged', 'reprise',
 }
 
-# Compilation-album keywords. Movies have one specific name (e.g. "Pushpa"),
-# but compilation albums repeat with names like "Hits Collection 2026" and
-# carry old songs under a misleading recent year. We exclude these so the
-# Latest era stays actually fresh.
-COMPILATION_RE = re.compile(
-    r'\b(collection|best of|hits of|songs of|compilation|jukebox|patriotic|'
-    r'all time|chartbusters|top hits|top songs|favorites|romantic hits|dance hits|'
-    r'super hits|melody hits|throwback|evergreen|special hit|popular hit|'
-    r'golden hit|playlist|essentials|originals|anthems|vibes|year wise|'
-    r'decade|fresh hits|new hits|hit songs|hit collection|songs collection|'
-    r'love songs|sad songs|party hits|pop hits|hottest hits|trending hits)\b',
-    re.IGNORECASE,
-)
-# Year + generic word in album = compilation (e.g. "Tollywood 2025 Hits")
-YEAR_TAGGED_RE = re.compile(r'\b(?:19|20)\d{2}\b')
-GENERIC_TERMS_RE = re.compile(
-    r'\b(hits?|songs?|telugu|tollywood|pop|romantic|dance|sad|love|fresh|'
-    r'new|special|jukebox|mix|chart|collection|best|top|popular|year)\b',
-    re.IGNORECASE,
-)
-
-
-def is_compilation(album: str) -> bool:
-    if not album:
-        return False
-    if COMPILATION_RE.search(album):
-        return True
-    if YEAR_TAGGED_RE.search(album) and GENERIC_TERMS_RE.search(album):
-        return True
-    return False
+# Compilation albums carry old songs under a misleading recent year; the
+# shared filter lives in catalog_tools so build and repair agree.
+is_compilation = catalog_tools.is_compilation
 
 
 GENERIC_COVER_RE = re.compile(
@@ -482,7 +527,7 @@ def normalize_detail(d: dict) -> dict | None:
         plays = int(d.get('play_count') or 0)
     except (TypeError, ValueError):
         plays = 0
-    return {
+    row = {
         'i': d.get('id'),
         't': title,
         'a': artist,
@@ -492,40 +537,41 @@ def normalize_detail(d: dict) -> dict | None:
         'y': year,
         'd': duration or 240,
         'p': plays,
+        'ad': TODAY,
     }
+    if music and music != artist:
+        row['md'] = music
+    if d.get('albumid') and not real_movie:
+        row['al'] = str(d['albumid'])
+    return row
 
 
 # ---------- Catalog I/O ----------
 
-def load_catalog() -> dict:
-    if CATALOG_PATH.exists():
-        try:
-            with CATALOG_PATH.open('r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            print(f'! Could not load existing catalog: {e}', file=sys.stderr)
-    return {'version': 2, 'songs': []}
+TODAY = datetime.now(timezone.utc).strftime('%Y-%m-%d')
 
 
-def save_catalog(cat: dict) -> None:
-    cat['updated'] = datetime.now(timezone.utc).isoformat(timespec='seconds')
-    with CATALOG_PATH.open('w', encoding='utf-8') as f:
-        json.dump(cat, f, separators=(',', ':'), ensure_ascii=False)
+def save_catalog(songs: list[dict]) -> None:
+    catalog_tools.save_catalog(songs)
 
 
 # ---------- Main ----------
 
 def main() -> int:
     print('=== Yadrcha catalog refresh (JioSaavn) ===')
-    cat = load_catalog()
-    by_id: dict[str, dict] = {s['i']: s for s in cat.get('songs', [])}
+    by_id: dict[str, dict] = {s['i']: s for s in catalog_tools.load_catalog()}
     existing_count = len(by_id)
     print(f'Loaded {existing_count} existing songs')
+    refresh_film_years()
 
-    # Shuffle the query order so that, when a run can't finish every query
-    # within budget, a different slice gets prioritised each day.
+    # Today's year-sweep queries go first (they're what makes each run add
+    # a new slice of every era), then the broad queries in shuffled order so
+    # that, when a run can't finish them all, a different slice gets
+    # prioritised each day.
     queries = list(QUERIES)
     random.shuffle(queries)
+    queries = year_sweep_queries(datetime.now(timezone.utc)) + queries
+    known_albums = {s['al'] for s in by_id.values() if s.get('al')}
 
     # 1. Search across queries — collect candidate song IDs AND album IDs.
     # Reserve most of the budget for album expansion + details + lyrics, so
@@ -533,6 +579,12 @@ def main() -> int:
     candidates: dict[str, dict] = {}      # song_id -> light search result
     album_ids: list[str] = []             # unique album_ids to expand later
     seen_albums: set[str] = set()
+    fresh_albums: list[str] = []          # new releases — always expanded
+    for aid in new_release_album_ids():
+        if aid not in seen_albums:
+            seen_albums.add(aid)
+            fresh_albums.append(aid)
+    print(f'New releases feed: {len(fresh_albums)} albums')
     for i, q in enumerate(queries, 1):
         if over_budget(0.20):
             print(f'  … search budget reached at query {i}/{len(queries)} ({elapsed():.0f}s)')
@@ -564,8 +616,10 @@ def main() -> int:
     # MAX_ALBUMS, and stop early at ~45% of the clock. Shuffling means a
     # different slice of albums is expanded each day, so coverage still
     # grows over time.
+    # Albums we've never expanded come before ones already in the catalog.
     random.shuffle(album_ids)
-    album_targets = album_ids[:MAX_ALBUMS]
+    album_ids.sort(key=lambda a: a in known_albums)
+    album_targets = (fresh_albums + album_ids)[:MAX_ALBUMS]
     print(f'Expanding {len(album_targets)} of {len(album_ids)} albums (cap {MAX_ALBUMS})...')
     album_expansion_added = 0
     albums_done = 0
@@ -637,7 +691,7 @@ def main() -> int:
 
     # Bank the free wins immediately so they survive even if the network
     # fallback phase below runs out of time or errors out.
-    save_catalog({'version': 2, 'songs': list(by_id.values())})
+    save_catalog(list(by_id.values()))
 
     todo = incomplete[:MAX_DETAILS]
     print(f'Fetching details for {len(todo)} incomplete songs (4 parallel workers)...')
@@ -672,11 +726,12 @@ def main() -> int:
             if completed % 25 == 0:
                 print(f'  {completed}/{len(todo)} | added {found}, failed {failed}')
                 with save_lock:
-                    partial = {'version': 2, 'songs': list(by_id.values())}
-                    save_catalog(partial)
+                    save_catalog(list(by_id.values()))
 
-    cat = {'version': 2, 'songs': list(by_id.values())}
-    save_catalog(cat)
+    # Repair years / dedupe compilation copies before spending lyrics
+    # probes on songs that are about to be merged away.
+    by_id = {s['i']: s for s in catalog_tools.repair(list(by_id.values()))}
+    save_catalog(list(by_id.values()))
 
     # 4. Probe LRClib for songs not yet probed, in parallel. Inline the LRC
     # text into the catalog row so the frontend never needs a runtime fetch
@@ -721,9 +776,10 @@ def main() -> int:
                 if probe_done % save_every == 0:
                     print(f'  lyrics {probe_done}/{len(unprobed)} | hit {probe_hit}')
                     with save_lock:
-                        save_catalog({'version': 2, 'songs': list(by_id.values())})
+                        save_catalog(list(by_id.values()))
 
-    save_catalog({'version': 2, 'songs': list(by_id.values())})
+    by_id = {s['i']: s for s in catalog_tools.repair(list(by_id.values()), verbose=False)}
+    save_catalog(list(by_id.values()))
 
     total = len(by_id)
     with_lyrics = sum(1 for s in by_id.values() if 'lr' in s)

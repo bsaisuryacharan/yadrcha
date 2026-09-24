@@ -1,68 +1,127 @@
-# Yadrcha · Random Telugu Music
+# Yadrcha · Telugu Music
 
-A one-tap shuffle player for random Telugu film music — old to latest. Press the green button, hear something. No login, no setup.
+*Yadrcha* (యాదృచ్ఛ, "chance") is a mobile-first random player for Telugu film
+music, from the 1950s to this week's releases. Tap play and it keeps playing
+songs you haven't heard. You can also pick an era or an exact year, open any
+film's album, or search.
 
-**Live: https://bsaisuryacharan.github.io/yadrcha/**
+**Live: https://bsaisuryacharan.github.io/yadrcha/** · install it from the
+browser menu ("Add to Home screen") and it runs full-screen like a native app.
 
-## Features
+## What's inside
 
-- **One-tap shuffle** — single big button, lean-back radio model
-- **Phone-frame UI** on desktop, full-screen on mobile
-- **Living Orb visualizer** (Three.js) — a noise-displaced energy orb in a
-  void that morphs and pulses to the live audio spectrum (Web Audio): bass
-  drives the pulse, highs shimmer the surface, and a fresnel halo sharpens
-  with loudness. The orb + ambient glow auto-tint to each cover's dominant
-  colour. Reacts to mouse / device tilt. Degrades gracefully if WebGL/Three.js
-  is unavailable.
-- **Now-playing poster** — the movie album art is shown crisply in the
-  bottom-left strip, with a glowing frame that pops on each track change.
-- **Era dial** — All / Vintage / 90s / 2000s / Latest (filtered by real release year)
-- **Time-of-day mood** — auto-shifts vibe (morning ragas → sunset melodies → late-night chill)
-- **Mystery reveal** — title hidden until song fades in
-- **Heart bursts** when you like a song
-- **MediaSession** — lock-screen art, headphone buttons, media keys
-- **Keyboard** — `Space` play · `→` next · `←` prev · `S` shuffle · `L` like · `M` mystery
-- **Reduced motion** respected
+- **Radio that never repeats.** Every song you've heard is remembered on your
+  device. Radio only serves new songs until you've heard everything in that
+  era, then starts a fresh cycle. Consecutive picks avoid the same film and
+  singer, and under "All eras" the classics get a fair share against the much
+  larger 2020s catalogue.
+- **Eras and exact years.** Chips for Classics, 70s, 80s, 90s, 2000s, 2010s
+  and 2020s, plus a year picker (with song counts) for any single year. The
+  filter uses each song's corrected film release year (see below), so the
+  2000s chip plays 2000–2009 films only.
+- **Albums.** Every film soundtrack has its own page: cover, year, length,
+  full track list, play or shuffle, save to library, and "More from 1995" /
+  "More with SPB" shelves. Playing a track plays the album from that point;
+  when the album ends, radio continues from the same era.
+- **Fresh every day.** Daily mixes (by era, by singer, Deep Cuts, Fresh Finds,
+  and one built from your likes), "Albums for today", new releases, and a
+  "Just added" shelf. They're seeded by the date, so they stay stable during
+  the day and change the next morning. The catalogue itself grows daily (see
+  *Catalogue* below).
+- **Now playing.** Mini player with swipe-to-skip, a full-screen player tinted
+  to the cover art, a draggable seek bar, shuffle and repeat (all or one),
+  **synced lyrics** (tap a line to jump to it), an editable **Up next** queue
+  (Play next / Add to queue), a sleep timer, and lock-screen / headphone
+  controls via MediaSession.
+- **Search** over songs, films and singers, tolerant of Telugu
+  transliteration ("Swathi Muthyam" also finds "Swati Mutyam"), with a
+  fallback to all of JioSaavn.
+- **Library.** Liked songs, saved albums, followed artists, recently played
+  and listening stats. Stored on your device; no account needed.
+- **Picks up where you left off.** The current song, position and queue
+  survive a reload. Back gestures close the player and sheets instead of
+  leaving the app.
 
-## Source
+## Catalogue
 
-**JioSaavn** for full-length Telugu film songs. Daily GitHub Action runs `scripts/refresh_catalog.py` which:
-1. Searches JioSaavn across ~110 diverse queries (composers, singers, movies, eras)
-2. Expands the movie albums behind those hits to pull whole soundtracks
-3. Filters to film songs only (label allowlist + non-film keyword exclusion)
-4. DES-decrypts each `encrypted_media_url` to the direct CDN URL on `aac.saavncdn.com`
-5. Probes LRClib for synced lyrics and inlines them into the catalog
-6. Commits `catalog.json` with full metadata + audio URL + movie poster + lyrics
+Songs come from **JioSaavn** (full-length streams from its CDN). A daily
+GitHub Action (`.github/workflows/refresh-catalog.yml`) runs
+`scripts/refresh_catalog.py`, which:
 
-The catalog grows past 10k songs, so the script is **wall-clock budgeted**
-(`TIME_BUDGET_MIN`, default 40m): every phase — search, album expansion,
-detail fetch, lyrics probe — is shuffled and capped so a run always finishes
-inside the CI window and commits. Coverage accumulates across daily runs
-rather than trying (and timing out) to do everything at once.
+1. Searches JioSaavn with ~110 broad queries, plus a **rotating year sweep**
+   (a different slice of film years every day, so each era keeps growing) and
+   the **new-releases feed**.
+2. Expands the albums behind those hits into full soundtracks, taking
+   never-expanded albums first.
+3. Keeps Telugu film songs only, decrypts the stream URL, and probes LRCLIB
+   for synced lyrics.
+4. Runs `scripts/catalog_tools.py` (below) and commits the result.
 
-Frontend reads `catalog.json` once and plays via plain HTML5 `<audio>` — no API keys, no IFrame, no auth. CORS is allowed `*` on JioSaavn's CDN, so it works on file://, GitHub Pages, anywhere.
+### Year repair (`scripts/catalog_tools.py`)
 
-## AI recommendations (optional)
+JioSaavn's `year` field is often wrong for older films. That is why the old
+"2000s" filter played 80s and 90s songs.
 
-The frontend has a Groq-powered "smart shuffle" that learns your taste from the songs you ❤️. By default it uses a heuristic scorer that runs entirely in-browser. To enable Groq:
+- Hundreds of legacy uploads carry a placeholder **2000**
+  (`Swati-Mutyam-2000-500x500.jpg` is a 1986 film).
+- Songs lifted onto label compilations ("Alanati Suswaralu 2018",
+  "Romantic 90's") carry the compilation's year.
+- Some re-uploads carry the upload year (Karna 2013 is really 1995).
 
-1. Get a free Groq API key from [console.groq.com](https://console.groq.com)
-2. Deploy the Cloudflare Worker proxy in `worker/` (see `worker/README.md`)
-3. Set `AI_WORKER_URL` in `index.html` to your Worker URL
-4. AI activates once you have 5+ liked songs
+Each song is re-dated from its raw JioSaavn year (kept as `yo`, so reruns are
+stable). Each album upload is dated as a unit, using this evidence: a sibling
+song of the same film with a trustworthy year, **Wikidata** Telugu film
+release years (`data/film_years.json`, refreshed each run), the year in the
+cover file name, and the singers' active years. The singers also rule out
+same-named remakes: a Chakri song can't belong to the 1953 *Devadasu*.
 
-Heuristic fallback is always active — even with no AI, the recommender weights candidates by artist match (3×), movie match (2×), era match (1.5×), year proximity (1×), and history penalty (-4×).
+The same step also:
 
-## Run
+- Rescues `Song (From "Film")` compilation copies onto their real film and
+  merges duplicates.
+- Drops label compilations, background scores, OSTs, dialogue tracks,
+  instrumental covers and devotional albums.
+- Assigns album ids.
 
-Just open `index.html` in any browser. Or serve it:
+Run it by hand with `python scripts/catalog_tools.py`.
+
+### Files
+
+- `catalog.json` holds metadata only: 2.6 MB, about 0.75 MB gzipped, versus
+  the previous 16 MB. CDN prefixes are stripped.
+- `lyrics/00.json` … `lyrics/63.json` are synced-lyrics shards. The app only
+  fetches one when you open lyrics (shard = FNV-1a(song id) % 64).
+
+## Run locally
+
 ```
-python -m http.server 8000
+python -m http.server 8000     # then open http://localhost:8000
 ```
 
-## Stack
+It's a static site: no build step, no framework, no API keys. It is plain ES
+modules in `src/`, one stylesheet in `assets/app.css`, and self-hosted fonts.
+A service worker (`sw.js`) makes repeat visits instant and lets the installed
+app open offline (playback still needs a connection).
 
-Single self-contained `index.html` — vanilla JS, vanilla CSS, no build step. The
-only runtime deps are loaded from CDN: CryptoJS (DES decrypt for live search)
-and Three.js (the 3D turntable, via import map — optional, fails soft). Hosts
-as-is on GitHub Pages, Cloudflare Pages, Netlify, Vercel.
+```
+index.html            app shell
+src/app.js            boot + hash router (#/album/…, #/artist/…, #/era/…, #/year/…, #/mix/…)
+src/catalog.js        catalogue loading, albums/artists/years indexes, search
+src/engine.js         no-repeat radio picks, daily mixes, albums of the day
+src/player.js         playback engine: contexts, queue, shuffle/repeat, sleep timer, MediaSession, session restore
+src/library.js        likes, saved albums, followed artists, history, "heard" memory (localStorage)
+src/lyrics.js         lyrics shards + live LRCLIB fallback
+src/ui/pages.js       Home, Search, Library, Album, Artist, Era/Year, Mix, Liked, Recent
+src/ui/nowplaying.js  mini player, full player, lyrics view, queue
+src/ui/components.js  rows, cards, song menu, era chips, year picker, sleep timer
+src/ui/overlay.js     bottom sheets + back-gesture handling
+```
+
+**Icons** are a subset of Material Symbols Rounded. To use a new icon, add its
+name to `assets/fonts/symbols.txt` (alphabetical) and run
+`scripts/update_icons.sh`.
+
+## Worker (optional)
+
+`worker/` is a Cloudflare Worker that proxies JioSaavn search and playback for
+the "Search all of JioSaavn" fallback. See `worker/README.md`.
