@@ -105,6 +105,13 @@ document.querySelectorAll('.tabbar a').forEach((a) => {
 // The previous version cached the whole catalogue (up to ~5 MB) in
 // localStorage; free that quota for likes/history.
 for (const k of ['yadrcha.catalog.v4', 'yadrcha.history.v1', 'yadrcha.theme']) store.del(k);
+try {
+  // …and the old one-key-per-song lyrics cache.
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('yadrcha.lyrics.') && k !== 'yadrcha.lyrics.v2') localStorage.removeItem(k);
+  }
+} catch {}
 
 async function boot() {
   player.init($('#audio'));
@@ -124,7 +131,7 @@ async function boot() {
   window.addEventListener('hashchange', route);
   route();
   library.on((what) => {
-    if (['likes', 'artists'].includes(what)) tabs.home?.invalidate?.();
+    if (['likes', 'artists', 'contexts'].includes(what)) tabs.home?.invalidate?.();
     if (what === 'likes') syncRows();
   });
   const wait = Math.max(0, 450 - (performance.now() - t0));

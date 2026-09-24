@@ -518,9 +518,10 @@ h1, h2, h3, p { margin: 0; }
 .player-context small { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.7); }
 .player-context b { display: block; font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.player-stage { flex: 1; min-height: 0; display: grid; place-items: center; position: relative; margin: 8px 0 4px; }
+.player-stage { flex: 1; min-height: 0; display: grid; place-items: center; position: relative; margin: 8px 0 4px; container-type: size; }
 .player-art {
-  width: min(100%, 46vh, 420px); aspect-ratio: 1; border-radius: 10px; overflow: hidden;
+  width: min(100%, 44svh, 420px); aspect-ratio: 1; border-radius: 10px; overflow: hidden;
+  width: min(100cqw, 100cqh, 420px);
   background: var(--surface-2);
   box-shadow: 0 28px 60px rgba(0,0,0,.55);
   transition: transform .45s var(--ease-out), opacity .3s;

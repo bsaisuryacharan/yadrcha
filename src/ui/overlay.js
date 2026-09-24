@@ -24,7 +24,11 @@ export function pushOverlay(name, close) {
 
 function unwind(fromIndex, then) {
   const closing = stack.splice(fromIndex);
-  if (!closing.length) { then?.(); return; }
+  if (!closing.length) {
+    // A close is still travelling through history — navigate after it lands.
+    if (then && ignorePop > 0) afterPop.push(then); else then?.();
+    return;
+  }
   ignorePop++;
   if (then) afterPop.push(then);
   history.go(-closing.length);

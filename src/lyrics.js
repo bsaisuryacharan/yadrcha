@@ -5,15 +5,18 @@ import { catalog } from './catalog.js';
 import { fnv1a, store } from './util.js';
 
 const shardCache = new Map();
-const LIVE_KEY = 'yadrcha.lyrics.';
+const LIVE_KEY = 'yadrcha.lyrics.v2';
 const LIVE_TTL = 30 * 86400000;
+const LIVE_MAX = 150;   // bounded so it can't eat the localStorage quota
 
 export const lyricsShard = (id, n = catalog.shards || 64) => fnv1a(id) % n;
 
 async function fromShard(song) {
   const n = lyricsShard(song.id);
   if (!shardCache.has(n)) {
-    shardCache.set(n, fetch(`lyrics/${String(n).padStart(2, '0')}.json`)
+    // Versioned by catalogue date: shards are rewritten by every refresh.
+    const v = encodeURIComponent(catalog.updated || '');
+    shardCache.set(n, fetch(`lyrics/${String(n).padStart(2, '0')}.json?v=${v}`)
       .then((r) => (r.ok ? r.json() : {}))
       .catch(() => { shardCache.delete(n); return {}; }));
   }
@@ -38,7 +41,8 @@ export function parseLRC(text) {
 }
 
 async function live(song, signal) {
-  const cached = store.get(LIVE_KEY + song.id, null);
+  const all = store.get(LIVE_KEY, {});
+  const cached = all[song.id];
   if (cached && Date.now() - cached.ts < LIVE_TTL) return cached.data;
   const enc = encodeURIComponent;
   const base = `https://lrclib.net/api/get?artist_name=${enc(song.artist)}&track_name=${enc(song.title)}`;
@@ -47,10 +51,11 @@ async function live(song, signal) {
     base,
     `https://lrclib.net/api/search?q=${enc(`${song.title} ${song.movie}`)}`,
   ];
-  let found = null;
+  let found = null, answered = false;
   for (const url of attempts) {
     try {
       const r = await fetch(url, { signal });
+      answered = true;
       if (!r.ok) continue;
       let d = await r.json();
       if (Array.isArray(d)) d = d.find((x) => x?.syncedLyrics) || d.find((x) => x?.plainLyrics);
@@ -59,7 +64,14 @@ async function live(song, signal) {
       if (e.name === 'AbortError') throw e;
     }
   }
-  store.set(LIVE_KEY + song.id, { ts: Date.now(), data: found });
+  // Only remember an answer (found or a real "not found") — never an
+  // offline failure.
+  if (answered) {
+    const fresh = store.get(LIVE_KEY, {});
+    fresh[song.id] = { ts: Date.now(), data: found };
+    const keep = Object.entries(fresh).sort((a, b) => b[1].ts - a[1].ts).slice(0, LIVE_MAX);
+    store.set(LIVE_KEY, Object.fromEntries(keep));
+  }
   return found;
 }
 

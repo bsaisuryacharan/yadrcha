@@ -1,10 +1,9 @@
-// Yadrcha service worker — makes the app open instantly and work as an
-// installed PWA. Strategy:
-//   * app shell + catalog: network-first (always fresh when online, cached
-//     copy when offline or the network is slow)
-//   * lyrics shards: cache-first (immutable per song)
+// Yadrcha service worker — makes the app installable and able to open
+// offline. Strategy:
+//   * everything same-origin: network-first, cached copy when offline
+//     (catalog.json also falls back when the network is slow)
 // Audio and cover art stream straight from JioSaavn's CDN, uncached.
-const VERSION = 'yadrcha-v3';
+const VERSION = 'yadrcha-v4';
 const SHELL = [
   './', 'index.html', 'assets/app.css', 'assets/icon.svg', 'manifest.webmanifest',
   'src/app.js', 'src/catalog.js', 'src/engine.js', 'src/library.js', 'src/lyrics.js',
@@ -22,37 +21,32 @@ self.addEventListener('activate', (e) => {
     .then(() => self.clients.claim()));
 });
 
+// Network-first everywhere, so app code, catalogue and lyrics are always
+// current when online. Only catalog.json gets a timeout (a slow network
+// shouldn't hold the app on the splash); code falls back to the cache only
+// when the network actually fails, so a deploy never mixes old and new
+// modules.
 function networkFirst(req, timeoutMs) {
+  const fromCache = () => caches.match(req, { ignoreSearch: true });
+  const net = fetch(req).then((res) => {
+    if (res.ok) {
+      const copy = res.clone();
+      caches.open(VERSION).then((c) => c.put(req, copy));
+    }
+    return res;
+  });
+  const safeNet = net.catch(() => fromCache().then((r) => r || Response.error()));
+  if (!timeoutMs) return safeNet;
   return new Promise((resolve) => {
     let done = false;
-    const fromCache = () => caches.match(req, { ignoreSearch: true }).then((r) => r);
-    const timer = setTimeout(() => {
-      fromCache().then((r) => { if (r && !done) { done = true; resolve(r); } });
-    }, timeoutMs);
-    fetch(req).then((res) => {
-      if (res.ok) {
-        const copy = res.clone();
-        caches.open(VERSION).then((c) => c.put(req, copy));
-      }
-      clearTimeout(timer);
-      if (!done) { done = true; resolve(res); }
-    }).catch(() => {
-      clearTimeout(timer);
-      fromCache().then((r) => { if (!done) { done = true; resolve(r || Response.error()); } });
-    });
+    const finish = (r) => { if (!done && r) { done = true; resolve(r); } };
+    setTimeout(() => fromCache().then(finish), timeoutMs);
+    safeNet.then((r) => { if (!done) { done = true; resolve(r); } });
   });
 }
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
-  if (url.pathname.includes('/lyrics/')) {
-    e.respondWith(caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
-      if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(e.request, copy)); }
-      return res;
-    })));
-    return;
-  }
-  const isCatalog = url.pathname.endsWith('catalog.json');
-  e.respondWith(networkFirst(e.request, isCatalog ? 4000 : 2500));
+  e.respondWith(networkFirst(e.request, url.pathname.endsWith('catalog.json') ? 4000 : 0));
 });

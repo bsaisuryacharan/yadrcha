@@ -162,7 +162,8 @@ export const player = {
     if (this.userQueue.length) {
       song = this.userQueue.shift();
     } else if (this.isRadio) {
-      song = this.radioBuffer.shift() || this._radioPick();
+      // A one-song pick has nothing else to play: replay it.
+      song = this.radioBuffer.shift() || this._radioPick() || this.current;
       this._refillRadio();
     } else if (this.ctx) {
       if (this.pos + 1 < this.order.length) {
@@ -189,7 +190,10 @@ export const player = {
   prev() {
     if (!this.current) return;
     if (this.audio.currentTime > 4) { this.audio.currentTime = 0; return; }
-    if (!this.isRadio && this.ctx && this.pos > 0) {
+    if (!this.isRadio && this.ctx && this.order[this.pos] && this.order[this.pos] !== this.current.id) {
+      // A queued song was playing: step back into the context where we left it.
+      this._load(catalog.byId.get(this.order[this.pos]), true);
+    } else if (!this.isRadio && this.ctx && this.pos > 0) {
       this.pos--;
       this._load(catalog.byId.get(this.order[this.pos]), true);
     } else if (this.back.length) {
@@ -240,11 +244,12 @@ export const player = {
   },
 
   playNext(song) {
+    if (!this.current) { this.playSong(song); return; }
     this.userQueue.unshift(song);
-    if (!this.current) this.next();
     emit('queue');
   },
   addToQueue(song) {
+    if (!this.current) { this.playSong(song); return; }
     this.userQueue.push(song);
     emit('queue');
   },
@@ -292,13 +297,14 @@ export const player = {
   /* ---------- internals ---------- */
 
   _radioPick() {
-    const exclude = new Set([...(this.current ? [this.current.id] : []), ...this.radioBuffer.map((s) => s.id), ...this.userQueue.map((s) => s.id), ...this.back.slice(-50)]);
+    const hard = new Set([...(this.current ? [this.current.id] : []), ...this.radioBuffer.map((s) => s.id), ...this.userQueue.map((s) => s.id)]);
+    const soft = new Set(this.back.slice(-50));
     // Songs already lined up count as "recent" too, so the upcoming
     // stretch varies film and singer.
     const recent = this.back.slice(-6).map((id) => catalog.byId.get(id)).filter(Boolean);
     if (this.current) recent.push(this.current);
     recent.push(...this.radioBuffer);
-    return pickRadio(this.ctx?.filter, { exclude, recent });
+    return pickRadio(this.ctx?.filter, { hard, soft, recent });
   },
   _refillRadio() {
     while (this.radioBuffer.length < RADIO_BUFFER) {
@@ -322,10 +328,12 @@ export const player = {
     const a = this.audio;
     this.current = song;
     this.loading = true;
+    // Drop any pending resume-seek from a previous load.
+    if (this._seekOnce) { a.removeEventListener('loadedmetadata', this._seekOnce); this._seekOnce = null; }
     a.src = song.url;
     if (startAt) {
-      const once = () => { a.currentTime = startAt; a.removeEventListener('loadedmetadata', once); };
-      a.addEventListener('loadedmetadata', once);
+      this._seekOnce = () => { a.currentTime = startAt; a.removeEventListener('loadedmetadata', this._seekOnce); this._seekOnce = null; };
+      a.addEventListener('loadedmetadata', this._seekOnce);
     }
     if (autoplay) a.play().catch(() => { this.loading = false; emit('state'); });
     else this.loading = false;
@@ -358,8 +366,8 @@ export const player = {
     if (!('mediaSession' in navigator)) return;
     const ms = navigator.mediaSession;
     const set = (a, fn) => { try { ms.setActionHandler(a, fn); } catch {} };
-    set('play', () => this.toggle());
-    set('pause', () => this.toggle());
+    set('play', () => { if (!this.playing) this.toggle(); });
+    set('pause', () => { if (this.playing) this.toggle(); });
     set('previoustrack', () => this.prev());
     set('nexttrack', () => this.next());
     set('seekto', (d) => this.seek(d.seekTime));
@@ -378,12 +386,12 @@ export const player = {
   /* ---------- session restore ---------- */
   saveSession() {
     if (!this.current) return;
-    const ctx = this.ctx ? { ...this.ctx, ids: this.ctx.ids ? this.ctx.ids.slice(0, 300) : undefined } : null;
+    const ctx = this.ctx ? { ...this.ctx, ids: this.ctx.ids ? this.ctx.ids.slice(0, 3000) : undefined } : null;
     store.set(SESSION_KEY, {
       song: this.current.id,
       time: Math.floor(this.audio?.currentTime || 0),
       ctx,
-      order: this.isRadio ? null : this.order.slice(0, 300),
+      order: this.isRadio ? null : this.order.slice(0, 3000),
       pos: this.pos,
       queue: this.userQueue.map((s) => s.id).slice(0, 50),
       radio: this.radioBuffer.map((s) => s.id),

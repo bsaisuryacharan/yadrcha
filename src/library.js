@@ -74,7 +74,7 @@ export const library = {
     const key = entry.t + ':' + entry.id;
     this.history = [{ ...entry, at: Date.now() }, ...this.history.filter((e) => e.t + ':' + e.id !== key)].slice(0, 120);
     store.set(K.history, this.history);
-    emit('history');
+    emit(entry.t === 'song' ? 'history' : 'contexts');
   },
   recentSongs(n = 50) { return this.history.filter((e) => e.t === 'song').slice(0, n).map((e) => e.id); },
   recentContexts(n = 8) { return this.history.filter((e) => e.t !== 'song').slice(0, n); },

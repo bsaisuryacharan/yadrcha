@@ -41,6 +41,7 @@ const playFrom = (ctx, ids) => (s) => player.playList(ctx, ids, s.id, { shuffle:
    ====================================================================== */
 export function HomePage() {
   const el = page();
+  let lastFilter = filterKey(library.prefs.filter);
   const render = () => {
     const f = library.prefs.filter;
     el.replaceChildren();
@@ -51,7 +52,7 @@ export function HomePage() {
       h('div.greet', h('small', new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })), h('h1', greeting())),
       h('a.icon-btn', { href: '#/recent', 'aria-label': 'Recently played' }, icon('history'))));
 
-    frag.append(eraChips(f, (nf) => { library.setPref('filter', nf); render(); el.scrollTo({ top: 0 }); }));
+    frag.append(eraChips(f, (nf) => { library.setPref('filter', nf); lastFilter = filterKey(nf); render(); el.scrollTo({ top: 0 }); }));
     frag.append(radioHero(f));
 
     // Jump back in — recent contexts as quick tiles
@@ -104,8 +105,12 @@ export function HomePage() {
   return {
     el,
     onShow() {
-      // Re-render on a new day or after library changes elsewhere.
-      if (new Date().getDate() !== lastDay || el.dataset.stale) { lastDay = new Date().getDate(); delete el.dataset.stale; render(); }
+      // Re-render on a new day, a filter set elsewhere ("Set on Home"), or
+      // library changes.
+      const fk = filterKey(library.prefs.filter);
+      if (new Date().getDate() !== lastDay || fk !== lastFilter || el.dataset.stale) {
+        lastDay = new Date().getDate(); lastFilter = fk; delete el.dataset.stale; render();
+      }
     },
     invalidate() { el.dataset.stale = '1'; },
   };
@@ -143,7 +148,7 @@ function quickTiles() {
   for (const e of library.recentContexts(10)) {
     if (out.length >= 6) break;
     if (e.t === 'album') {
-      const a = catalog.albums.get(e.id);
+      const a = catalog.albums.get(String(e.id).replace(/^album:/, ''));
       if (a) out.push(h('a.tile', { href: `#/album/${a.id}` }, art(a.thumb, { key: a.id }), h('b', a.name)));
     } else if (e.t === 'mix') {
       const m = mixById(e.id);

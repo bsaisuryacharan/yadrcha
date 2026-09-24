@@ -394,8 +394,14 @@ NON_FILM_TERMS = {
 }
 
 # Compilation albums carry old songs under a misleading recent year; the
-# shared filter lives in catalog_tools so build and repair agree.
-is_compilation = catalog_tools.is_compilation
+# shared filter lives in catalog_tools so build and repair agree. Wikidata
+# film titles exempt real films whose names look like compilations
+# (Kirrak Party, Brahmotsavam); refreshed in main() before ingest.
+FILM_YEARS: dict[str, list[int]] = catalog_tools.load_film_years()
+
+
+def is_compilation(album: str) -> bool:
+    return catalog_tools.is_compilation(album, FILM_YEARS)
 
 
 GENERIC_COVER_RE = re.compile(
@@ -563,6 +569,8 @@ def main() -> int:
     existing_count = len(by_id)
     print(f'Loaded {existing_count} existing songs')
     refresh_film_years()
+    FILM_YEARS.clear()
+    FILM_YEARS.update(catalog_tools.load_film_years())
 
     # Today's year-sweep queries go first (they're what makes each run add
     # a new slice of every era), then the broad queries in shuffled order so

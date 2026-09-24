@@ -100,8 +100,8 @@ python -m http.server 8000     # then open http://localhost:8000
 
 It's a static site: no build step, no framework, no API keys. It is plain ES
 modules in `src/`, one stylesheet in `assets/app.css`, and self-hosted fonts.
-A service worker (`sw.js`) makes repeat visits instant and lets the installed
-app open offline (playback still needs a connection).
+A service worker (`sw.js`) caches the app so the installed version can open
+offline (playback still needs a connection).
 
 ```
 index.html            app shell

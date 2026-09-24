@@ -292,7 +292,8 @@ def save_catalog(songs: list[dict]) -> None:
             r['nl'] = 1
         r['u'] = _short(r.get('u'), AUDIO_PREFIX)
         r['c'] = _short(r.get('c'), COVER_PREFIX)
-        r = {k: r[k] for k in KEY_ORDER if k in r and r[k] not in (None, '', 0) or k == 'y' and k in r}
+        # `y` may be None (unknown) and `yo` may be 0 (arrived without a year).
+        r = {k: r[k] for k in KEY_ORDER if k in r and (k in ('y', 'yo') or r[k] not in (None, '', 0))}
         rows.append(r)
     # Stable order keeps daily diffs small.
     rows.sort(key=lambda r: (r.get('b', ''), r['i']))
@@ -315,7 +316,9 @@ def save_catalog(songs: list[dict]) -> None:
 # ---------- repair ----------
 
 def _raw_year(s: dict) -> int | None:
-    y = s.get('yo', s.get('y'))
+    """JioSaavn's original year. `yo: 0` marks a song that arrived with no
+    year at all (so a year we guessed for it is never mistaken for raw)."""
+    y = s['yo'] if 'yo' in s else s.get('y')
     try:
         return int(y) if y else None
     except (TypeError, ValueError):
@@ -362,7 +365,7 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
     info = {}
     for s in songs:
         raw = _raw_year(s)
-        name, slug_year, legacy = cover_slug(s.get('c', ''))
+        name, slug_year, legacy = cover_slug(s.get('c') or '')
         match = slug_matches_movie(name, s.get('m', ''))
         compilation = bool(s.get('x')) or match is False
         placeholder = legacy and slug_year == 2000 and raw == 2000
@@ -489,7 +492,12 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
                          key=lambda y: (years[y], -y))
     for s in songs:
         raw = info[s['i']]['raw']
-        if raw is not None and s['y'] != raw:
+        if raw is None:
+            if s['y']:
+                s['yo'] = 0
+            else:
+                s.pop('yo', None)
+        elif s['y'] != raw:
             s['yo'] = raw
         else:
             s.pop('yo', None)
@@ -498,7 +506,8 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
     film_cover: dict[tuple[str, int | None], str] = {}
     for s in sorted(songs, key=lambda s: -(s.get('p') or 0)):
         if not s.get('x'):
-            film_cover.setdefault((info[s['i']]['mk'], s['y']), s['c'])
+            if s.get('c'):
+                film_cover.setdefault((info[s['i']]['mk'], s['y']), s['c'])
     for s in songs:
         if s.get('x'):
             c = film_cover.get((info[s['i']]['mk'], s['y']))

@@ -6,7 +6,7 @@ import { catalog, ERAS, eraOfYear, filterKey, filterLabel, isAllFilter, mkey, sp
 import { library } from './library.js';
 import { rng, shuffle, store, todayKey, weightedPick, toast, hashColor } from './util.js';
 
-const DAY = todayKey();
+const day = () => todayKey();
 
 function tasteProfile() {
   const artists = new Map();
@@ -27,15 +27,21 @@ function tasteProfile() {
  * Never repeats a song until every song in the filter has been heard;
  * then that filter starts a fresh cycle.
  */
-export function pickRadio(filter, { exclude = new Set(), recent = [] } = {}) {
+export function pickRadio(filter, { hard = new Set(), soft = new Set(), recent = [] } = {}) {
+  // hard: never pick (current, queued, buffered). soft: recently played —
+  // avoided while possible, but small pools may need them.
   const pool = catalog.pool(filter);
   if (!pool.length) return null;
-  let fresh = pool.filter((s) => !library.heard.has(s.id) && !exclude.has(s.id));
+  const unheard = (s) => !library.heard.has(s.id) && !hard.has(s.id);
+  let fresh = pool.filter((s) => unheard(s) && !soft.has(s.id));
+  if (!fresh.length) fresh = pool.filter(unheard);
   if (!fresh.length) {
-    library.forgetHeard(pool.map((s) => s.id));
+    // Every song in this pick has been heard: start a fresh cycle, once.
+    library.forgetHeard(pool.filter((s) => !hard.has(s.id)).map((s) => s.id));
     toast(`You’ve heard all ${pool.length.toLocaleString()} songs in ${filterLabel(filter)} — starting a fresh cycle`, 4000);
-    fresh = pool.filter((s) => !exclude.has(s.id));
-    if (!fresh.length) fresh = pool;
+    fresh = pool.filter((s) => !hard.has(s.id) && !soft.has(s.id));
+    if (!fresh.length) fresh = pool.filter((s) => !hard.has(s.id));
+    if (!fresh.length) return null;
   }
   // Sample a manageable slice for weighting.
   const r = Math.random;
@@ -99,7 +105,9 @@ function pickSongs(pool, n, rand, extraWeight = () => 1) {
 
 export function dailyMixes() {
   const cached = store.get(MIX_KEY, null);
-  if (cached && cached.day === DAY && cached.v === catalog.updated && cached.likes === library.likes.size) {
+  const DAY = day();
+  // Stable for the whole day — liking songs doesn't reshuffle the mixes.
+  if (cached && cached.day === DAY && cached.v === catalog.updated) {
     return cached.mixes.map((m) => ({ ...m, songIds: m.songIds.filter((id) => catalog.byId.has(id)) }));
   }
   const rand = rng('mix:' + DAY);
@@ -145,7 +153,7 @@ export function dailyMixes() {
     if (m) mixes.push(m);
   }
 
-  store.set(MIX_KEY, { day: DAY, v: catalog.updated, likes: library.likes.size, mixes });
+  store.set(MIX_KEY, { day: DAY, v: catalog.updated, mixes });
   return mixes;
 }
 
@@ -155,7 +163,7 @@ export function mixById(id) {
 
 /* ---------- albums of the day ---------- */
 export function albumsOfTheDay(filter, n = 12) {
-  const rand = rng(`albums:${DAY}:${filterKey(filter)}`);
+  const rand = rng(`albums:${day()}:${filterKey(filter)}`);
   const pool = catalog.albumsIn(filter).filter((a) => a.songs.length >= 3);
   const unheard = (a) => a.songs.reduce((c, s) => c + (library.heard.has(s.id) ? 0 : 1), 0) / a.songs.length;
   return weightedPick(pool, n, (a) => Math.pow(a.plays + 100, 0.22) * (0.2 + unheard(a)), rand);
@@ -163,7 +171,7 @@ export function albumsOfTheDay(filter, n = 12) {
 
 /** Artists to feature for a filter, rotating daily among the strongest. */
 export function artistsFor(filter, n = 12) {
-  const rand = rng(`artists:${DAY}:${filterKey(filter)}`);
+  const rand = rng(`artists:${day()}:${filterKey(filter)}`);
   let list = catalog.artistList;
   if (!isAllFilter(filter)) {
     const inPool = new Map();
@@ -181,7 +189,7 @@ export function artistsFor(filter, n = 12) {
 
 /** Radio preview covers for the hero card (stable per day + filter). */
 export function heroCovers(filter) {
-  const rand = rng(`hero:${DAY}:${filterKey(filter)}`);
+  const rand = rng(`hero:${day()}:${filterKey(filter)}`);
   const albums = weightedPick(catalog.albumsIn(filter).filter((a) => a.songs.length >= 3), 3, (a) => Math.pow(a.plays + 100, 0.5), rand);
   return albums.map((a) => a.cover);
 }
