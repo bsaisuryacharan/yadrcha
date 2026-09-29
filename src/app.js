@@ -8,11 +8,11 @@ import { syncRows } from './ui/components.js';
 import { initNowPlaying, openPlayer } from './ui/nowplaying.js';
 import { closeAllOverlays } from './ui/overlay.js';
 import {
-  AlbumPage, ArtistPage, EraPage, HomePage, LibraryPage, LikedPage, MixPage, RecentPage, SearchPage,
+  AlbumPage, ArtistPage, EraPage, ExplorePage, HomePage, LibraryPage, LikedPage, MixPage, RecentPage, SearchPage,
 } from './ui/pages.js';
 
 const pagesEl = $('#pages');
-const tabs = { home: null, search: null, library: null };
+const tabs = { home: null, search: null, explore: null, library: null };
 const cache = new Map();      // route -> { el, onShow, scroll }
 let current = null;           // { route, entry, tab }
 let lastTab = 'home';
@@ -30,6 +30,7 @@ function build({ parts }) {
   switch (a) {
     case undefined: return { tab: 'home', make: HomePage };
     case 'search': return { tab: 'search', make: SearchPage };
+    case 'explore': return { tab: 'explore', make: ExplorePage };
     case 'library': return { tab: 'library', make: LibraryPage };
     case 'liked': return { make: LikedPage, fresh: true };
     case 'recent': return { make: RecentPage, fresh: true };

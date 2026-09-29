@@ -330,6 +330,33 @@ async function playOnline(id) {
 }
 
 /* ======================================================================
+   EXPLORE
+   ====================================================================== */
+export function ExplorePage() {
+  const el = page();
+  const pickYear = () => yearPicker(null, (f) => go(eraHref(f)));
+  el.append(
+    h('header.top', h('div.brand-dot'), h('h1', 'Explore'),
+      h('button.icon-btn', { type: 'button', 'aria-label': 'Pick a year', onclick: pickYear }, icon('calendar_month'))),
+    h('p.detail-foot', { style: { paddingTop: '0' } }, 'Every song is matched to its film’s release year — pick an era, or go straight to a year.'),
+    section('Eras', h('div.browse', [
+      ...ERAS.filter((e) => e.id !== 'all').map(eraTile),
+      h('button.browse-tile', { type: 'button', style: { '--c': '#3a3a48' }, onclick: pickYear },
+        h('span', 'Pick a year'), h('small', `1950 – ${NOW}`),
+        h('div.art', { style: { display: 'grid', placeItems: 'center', background: '#555' } }, icon('calendar_month'))),
+    ])),
+  );
+  const latest = catalog.latestAlbums(16);
+  if (latest.length) el.append(section('New releases', rail(latest.map((a) => albumCard(a, { sub: `${a.year} • ${plural(a.songs.length, 'song')}` })))));
+  el.append(section('Singers & composers', rail(catalog.artistList.slice(0, 24).map(artistCard))));
+  const classics = catalog.albumsIn({ kind: 'era', id: 'classics' }).slice().sort((a, b) => b.plays - a.plays).slice(0, 16);
+  if (classics.length) el.append(section('Golden-age classics', rail(classics.map((a) => albumCard(a))), { more: h('a', { href: '#/era/classics' }, 'See all') }));
+  const nineties = catalog.albumsIn({ kind: 'era', id: '90s' }).slice().sort((a, b) => b.plays - a.plays).slice(0, 16);
+  if (nineties.length) el.append(section('90s favourites', rail(nineties.map((a) => albumCard(a))), { more: h('a', { href: '#/era/90s' }, 'See all') }));
+  return { el };
+}
+
+/* ======================================================================
    LIBRARY
    ====================================================================== */
 export function LibraryPage() {

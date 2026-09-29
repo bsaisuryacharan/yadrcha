@@ -49,7 +49,7 @@
 
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
-  --tab-h: calc(58px + var(--safe-b));
+  --tab-h: calc(62px + var(--safe-b));
   --mini-h: 64px;
   --gutter: 16px;
   color-scheme: dark;
@@ -105,7 +105,7 @@ h1, h2, h3, p { margin: 0; }
   background: var(--bg);
 }
 .page::-webkit-scrollbar { display: none; }
-.has-mini .page { padding-bottom: calc(var(--tab-h) + var(--mini-h) + 28px); }
+.has-mini .page { padding-bottom: calc(var(--tab-h) + var(--mini-h) + 40px); }
 .page.enter { animation: pageIn .32s var(--ease-out); }
 @keyframes pageIn { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
 .page.enter-tab { animation: fadeIn .22s ease; }
@@ -116,7 +116,7 @@ h1, h2, h3, p { margin: 0; }
   position: absolute; left: 0; right: 0; bottom: 0; z-index: 30;
   height: var(--tab-h); padding-bottom: var(--safe-b);
   display: flex; align-items: stretch;
-  background: linear-gradient(180deg, rgba(10,10,13,0) 0%, rgba(10,10,13,.92) 28%, #0a0a0d 60%);
+  background: linear-gradient(180deg, rgba(10,10,13,0) 0%, rgba(10,10,13,.97) 16%, #0a0a0d 30%);
 }
 .tabbar a {
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
@@ -128,10 +128,38 @@ h1, h2, h3, p { margin: 0; }
 .tabbar a.active .ms { font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24; }
 .tabbar a:active .ms { transform: scale(.88); }
 
+/* Centre "play random" button in the tab bar */
+.tab-center { flex: 1; display: grid; place-items: center; }
+.radio-fab {
+  position: relative; width: 56px; height: 56px; border-radius: 50%;
+  margin-top: -14px;
+  display: grid; place-items: center;
+  color: var(--accent-ink);
+  background: linear-gradient(145deg, #5ff3c2 0%, var(--accent) 45%, #17a8c9 100%);
+  box-shadow: 0 8px 22px rgba(46, 230, 166, .35), 0 0 0 5px #0a0a0d;
+  transition: transform .18s var(--ease), box-shadow .3s;
+}
+.radio-fab .ms { font-size: 30px; position: relative; z-index: 1; }
+.radio-fab:active { transform: scale(.9); }
+.radio-ring {
+  position: absolute; inset: -5px; border-radius: 50%;
+  border: 2px solid transparent; pointer-events: none;
+}
+.radio-fab.on .radio-ring {
+  border-color: rgba(46, 230, 166, .55);
+  animation: ringPulse 1.8s ease-out infinite;
+}
+@keyframes ringPulse {
+  0% { transform: scale(.92); opacity: 1; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+.radio-fab.pop { animation: fabPop .45s var(--ease-out); }
+@keyframes fabPop { 0% { transform: scale(1); } 35% { transform: scale(1.15) rotate(-8deg); } 100% { transform: scale(1); } }
+
 /* ---------- mini player ---------- */
 .mini {
   position: absolute; z-index: 31;
-  left: 8px; right: 8px; bottom: calc(var(--tab-h) + 2px);
+  left: 8px; right: 8px; bottom: calc(var(--tab-h) + 14px);  /* clears the raised centre button */
   height: var(--mini-h);
   border-radius: 12px; overflow: hidden;
   background: rgb(var(--tint));
@@ -646,7 +674,7 @@ h1, h2, h3, p { margin: 0; }
 /* ---------- toast ---------- */
 .toast {
   position: fixed; left: 12px; right: 12px; z-index: 90;
-  bottom: calc(var(--tab-h) + var(--mini-h) + 14px);
+  bottom: calc(var(--tab-h) + var(--mini-h) + 26px);
   padding: 13px 16px; border-radius: 10px;
   background: #f4f4f5; color: #111; font-size: 14px; font-weight: 600;
   box-shadow: 0 10px 30px rgba(0,0,0,.4);

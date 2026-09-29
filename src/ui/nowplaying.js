@@ -1,6 +1,6 @@
 // Mini player, full-screen player, synced lyrics and the queue sheet.
 
-import { catalog } from '../catalog.js';
+import { catalog, filterLabel, isAllFilter } from '../catalog.js';
 import { library } from '../library.js';
 import { getLyrics } from '../lyrics.js';
 import { player } from '../player.js';
@@ -65,6 +65,7 @@ export function initNowPlaying() {
   dragToDismiss($('#player-grab'), playerEl, closePlayer, { threshold: 140 });
   swipeX($('#player-art'), (dir) => (dir < 0 ? player.next() : player.prev()), $('#player-art'));
   initSeek();
+  initRadioFab();
 
   player.on('track', onTrack);
   player.on('state', onState);
@@ -73,6 +74,37 @@ export function initNowPlaying() {
   player.on('queue', () => { if (queueRender) queueRender(); });
   library.on((w) => { if (w === 'likes') onLikes(); });
   onMode();
+}
+
+/* ---------- centre tab-bar button: one tap = endless random songs ---------- */
+function initRadioFab() {
+  const btn = $('#radio-fab');
+  // The button owns one radio: random songs from the era/year picked on Home.
+  const fabId = () => {
+    const f = library.prefs.filter;
+    return 'radio:' + (f?.kind === 'year' ? f.year : f?.id || 'all');
+  };
+  const mine = () => !!player.current && player.ctx?.id === fabId();
+  btn.addEventListener('click', () => {
+    haptic(14);
+    if (mine()) { player.toggle(); return; }   // already on: pause / resume
+    const f = library.prefs.filter;
+    player.playRadio(f);
+    if (!player.current) return;
+    btn.classList.remove('pop'); void btn.offsetWidth; btn.classList.add('pop');
+    toast(isAllFilter(f) ? 'Playing random Telugu songs' : `Playing random ${filterLabel(f)} songs`, 1800);
+    openPlayer();
+  });
+  const sync = () => {
+    const on = mine() && player.playing;
+    btn.classList.toggle('on', on);
+    $('#radio-fab-icon').textContent = on ? 'pause' : mine() ? 'play_arrow' : 'shuffle';
+    btn.setAttribute('aria-label', on ? 'Pause random songs' : mine() ? 'Resume random songs' : 'Play random songs');
+  };
+  player.on('state', sync);
+  player.on('track', sync);
+  library.on((w) => { if (w === 'prefs') sync(); });
+  sync();
 }
 
 /* ---------- open / close ---------- */

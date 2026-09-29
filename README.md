@@ -10,6 +10,9 @@ browser menu ("Add to Home screen") and it runs full-screen like a native app.
 
 ## What's inside
 
+- **One-tap random play.** The big button in the middle of the bottom bar
+  starts endless random songs (from the era/year picked on Home) and opens
+  the player; tap it again to pause or resume.
 - **Radio that never repeats.** Every song you've heard is remembered on your
   device. Radio only serves new songs until you've heard everything in that
   era, then starts a fresh cycle. Consecutive picks avoid the same film and
@@ -111,7 +114,7 @@ src/engine.js         no-repeat radio picks, daily mixes, albums of the day
 src/player.js         playback engine: contexts, queue, shuffle/repeat, sleep timer, MediaSession, session restore
 src/library.js        likes, saved albums, followed artists, history, "heard" memory (localStorage)
 src/lyrics.js         lyrics shards + live LRCLIB fallback
-src/ui/pages.js       Home, Search, Library, Album, Artist, Era/Year, Mix, Liked, Recent
+src/ui/pages.js       Home, Search, Explore, Library, Album, Artist, Era/Year, Mix, Liked, Recent
 src/ui/nowplaying.js  mini player, full player, lyrics view, queue
 src/ui/components.js  rows, cards, song menu, era chips, year picker, sleep timer
 src/ui/overlay.js     bottom sheets + back-gesture handling
