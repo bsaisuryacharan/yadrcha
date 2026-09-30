@@ -57,7 +57,11 @@ GitHub Action (`.github/workflows/refresh-catalog.yml`) runs
 2. Expands the albums behind those hits into full soundtracks, taking
    never-expanded albums first.
 3. Keeps Telugu film songs only, decrypts the stream URL, and probes LRCLIB
-   for synced lyrics.
+   for synced lyrics (`scripts/lyrics_probe.py`: exact match, then searches by
+   title, first singer and film; a result is accepted only if title and
+   duration match). Songs first checked with the old exact-only probe are
+   retried, most popular first, up to `MAX_LYRICS` (900) per run. The app also
+   does a live lookup with the same checks for songs the build hasn't matched.
 4. Runs `scripts/catalog_tools.py` (below) and commits the result.
 
 ### Year repair (`scripts/catalog_tools.py`)

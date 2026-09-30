@@ -28,7 +28,7 @@ What it does
 Catalog row keys (v3):
   i id · t title · a singers · m movie · u audio path · c cover path
   y release year (None = unknown) · d duration s · p play count
-  b album id · l 1 = lyrics in shard · nl 1 = probed, no lyrics
+  b album id · l 1 = lyrics in shard · nl 1/2 = probed, no lyrics (2 = current probe)
   yo raw JioSaavn year when repaired · x 1 = lifted off a compilation
   ad date added (YYYY-MM-DD) · md music director · al JioSaavn album id
 """
@@ -300,7 +300,7 @@ def save_catalog(songs: list[dict]) -> None:
             r['l'] = 1
             r.pop('nl', None)
         elif r.get('nl'):
-            r['nl'] = 1
+            r['nl'] = int(r['nl'])   # 1 = old exact probe, 2 = current probe
         r['u'] = _short(r.get('u'), AUDIO_PREFIX)
         r['c'] = _short(r.get('c'), COVER_PREFIX)
         # `y` may be None (unknown) and `yo` may be 0 (arrived without a year).

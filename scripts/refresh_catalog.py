@@ -39,6 +39,7 @@ from threading import Lock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import catalog_tools  # noqa: E402
+import lyrics_probe  # noqa: E402
 
 try:
     import requests
@@ -128,7 +129,7 @@ MAX_DETAILS = int(os.environ.get('MAX_DETAILS', '600'))
 # are shuffled (different slice each day) and progress is persisted.
 TIME_BUDGET_MIN = float(os.environ.get('TIME_BUDGET_MIN', '38'))
 MAX_ALBUMS = int(os.environ.get('MAX_ALBUMS', '350'))    # albums to expand / run
-MAX_LYRICS = int(os.environ.get('MAX_LYRICS', '500'))    # lyrics probes / run
+MAX_LYRICS = int(os.environ.get('MAX_LYRICS', '900'))    # lyrics probes / run
 
 _START = time.monotonic()
 _DEADLINE = _START + TIME_BUDGET_MIN * 60
@@ -234,33 +235,22 @@ def song_details(song_id: str) -> dict | None:
     return songs[0] if songs else None
 
 
-def probe_lyrics(song: dict) -> str | None:
-    """Query LRClib for synced lyrics. Returns raw LRC text or None.
+def _lrclib_get(url: str):
+    try:
+        r = requests.get(url, timeout=6, headers=lyrics_probe.UA)
+        return r.json() if r.status_code == 200 else None
+    except Exception:
+        return None
 
-    Tries 3 progressively-relaxed URL variants (full match → drop duration
-    → drop album). First synced match wins. Skips on any error so the
-    catalog refresh still finishes if LRClib has a hiccup."""
-    enc = urllib.parse.quote
-    artist = song.get('a') or ''
-    title = song.get('t') or ''
-    movie = song.get('m') or ''
-    duration = song.get('d') or ''
-    urls = [
-        f'https://lrclib.net/api/get?artist_name={enc(artist)}&track_name={enc(title)}&album_name={enc(movie)}&duration={duration}',
-        f'https://lrclib.net/api/get?artist_name={enc(artist)}&track_name={enc(title)}&album_name={enc(movie)}',
-        f'https://lrclib.net/api/get?artist_name={enc(artist)}&track_name={enc(title)}',
-    ]
-    for url in urls:
-        try:
-            r = requests.get(url, timeout=5, headers={'User-Agent': 'yadrcha-catalog/1.0'})
-            if r.status_code != 200:
-                continue
-            data = r.json()
-            if data.get('syncedLyrics'):
-                return data['syncedLyrics']
-        except Exception:
-            continue
-    return None
+
+def probe_lyrics(song: dict) -> str | None:
+    """Synced lyrics from LRCLIB (see scripts/lyrics_probe.py). Returns the
+    raw LRC text or None; never raises, so an LRCLIB hiccup can't stop the
+    catalogue refresh."""
+    try:
+        return lyrics_probe.probe(song, _lrclib_get)
+    except Exception:
+        return None
 
 
 def album_songs(album_id: str) -> list[dict]:
@@ -749,9 +739,13 @@ def main() -> int:
     # MAX_LYRICS per run and stop near the deadline. Songs marked 'nl'
     # (probed, no lyrics) are skipped on later runs, so the unprobed pool
     # shrinks every day until the whole catalog is covered.
-    unprobed = [s for s in by_id.values()
-                if 'lr' not in s and 'nl' not in s]
-    random.shuffle(unprobed)
+    # Never-probed songs first, then songs only tried with the old exact-match
+    # probe (nl == 1) — most popular first, so the biggest songs get lyrics
+    # soonest. Songs tried with the current probe (nl >= 2) wait for a retry.
+    def _needs_probe(s):
+        return 'lr' not in s and (s.get('nl') or 0) < lyrics_probe.PROBE_VERSION
+    unprobed = [s for s in by_id.values() if _needs_probe(s)]
+    unprobed.sort(key=lambda s: (1 if s.get('nl') else 0, -(s.get('p') or 0)))
     unprobed = unprobed[:MAX_LYRICS]
     print(f'Probing LRClib for {len(unprobed)} songs (4 parallel workers, cap {MAX_LYRICS})...')
     probe_done = 0; probe_hit = 0
@@ -779,7 +773,7 @@ def main() -> int:
                     s['lr'] = raw
                     probe_hit += 1
                 else:
-                    s['nl'] = True   # probed, no lyrics
+                    s['nl'] = lyrics_probe.PROBE_VERSION   # probed, no lyrics
                 probe_done += 1
                 if probe_done % save_every == 0:
                     print(f'  lyrics {probe_done}/{len(unprobed)} | hit {probe_hit}')

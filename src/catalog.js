@@ -92,7 +92,8 @@ export const catalog = {
         albumId: r.b || 'm' + mkey(r.m) + (r.y || ''),
         hasLyrics: !!(r.l || r.lr),
         lyricsInline: r.lr || null,
-        noLyrics: !!r.nl,
+        // nl 1 = old strict probe (worth a live retry); 2 = current probe
+        noLyrics: (r.nl || 0) >= 2,
         added: r.ad || null,
       });
     }

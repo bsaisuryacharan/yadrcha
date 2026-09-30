@@ -40,16 +40,48 @@ export function parseLRC(text) {
   return out.length ? out : null;
 }
 
+const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9 ]/g, '')
+  .replace(/th/g, 't').replace(/dh/g, 'd').replace(/ee/g, 'i').replace(/oo/g, 'u').replace(/aa/g, 'a')
+  .replace(/w/g, 'v').replace(/z/g, 'j').replace(/(.)\1+/g, '$1').replace(/\s+/g, ' ').trim();
+const cleanTitle = (t) => String(t || '').replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
+  .replace(/\s*[-–]\s*(reprise|remix|lofi|lo-fi|male|female|version|from\b.*|telugu|title song|sad|happy|duet)\b.*$/i, '')
+  .replace(/\s+/g, ' ').trim();
+function similar(a, b) {
+  a = norm(a); b = norm(b);
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  // Dice coefficient on bigrams — close enough to difflib for a yes/no check.
+  const grams = (x) => { const m = new Map(); for (let i = 0; i < x.length - 1; i++) { const g = x.slice(i, i + 2); m.set(g, (m.get(g) || 0) + 1); } return m; };
+  const ga = grams(a), gb = grams(b); let hit = 0;
+  for (const [g, n] of ga) hit += Math.min(n, gb.get(g) || 0);
+  return (2 * hit) / Math.max(1, a.length - 1 + b.length - 1);
+}
+/** Is this LRCLIB record plausibly the same recording? A wrong song's
+ *  lyrics are worse than none. */
+function acceptable(song, c) {
+  if (!c || !(c.syncedLyrics || c.plainLyrics)) return false;
+  const ts = Math.max(similar(cleanTitle(song.title), c.trackName), similar(song.title, c.trackName));
+  if (ts < 0.8) return false;
+  if (song.duration && c.duration) {
+    const diff = Math.abs(song.duration - c.duration);
+    return diff <= 12 && (diff <= 5 || ts >= 0.95);
+  }
+  const who = norm(`${c.artistName || ''} ${c.albumName || ''}`);
+  const singers = String(song.artist).split(/\s*[,&]\s*/).map(norm).filter(Boolean);
+  return singers.some((x) => who.includes(x.split(' ').pop())) || who.includes(norm(cleanTitle(song.movie)));
+}
+
 async function live(song, signal) {
   const all = store.get(LIVE_KEY, {});
   const cached = all[song.id];
   if (cached && Date.now() - cached.ts < LIVE_TTL) return cached.data;
   const enc = encodeURIComponent;
-  const base = `https://lrclib.net/api/get?artist_name=${enc(song.artist)}&track_name=${enc(song.title)}`;
+  const title = cleanTitle(song.title), singer = String(song.artist).split(/\s*[,&]\s*/)[0];
   const attempts = [
-    `${base}&album_name=${enc(song.movie)}&duration=${song.duration || ''}`,
-    base,
-    `https://lrclib.net/api/search?q=${enc(`${song.title} ${song.movie}`)}`,
+    `https://lrclib.net/api/get?artist_name=${enc(song.artist)}&track_name=${enc(song.title)}&album_name=${enc(song.movie)}&duration=${song.duration || ''}`,
+    `https://lrclib.net/api/search?track_name=${enc(title)}&artist_name=${enc(singer)}`,
+    `https://lrclib.net/api/search?track_name=${enc(title)}`,
+    `https://lrclib.net/api/search?q=${enc(`${title} ${cleanTitle(song.movie)}`)}`,
   ];
   let found = null, answered = false;
   for (const url of attempts) {
@@ -57,9 +89,10 @@ async function live(song, signal) {
       const r = await fetch(url, { signal });
       answered = true;
       if (!r.ok) continue;
-      let d = await r.json();
-      if (Array.isArray(d)) d = d.find((x) => x?.syncedLyrics) || d.find((x) => x?.plainLyrics);
-      if (d?.syncedLyrics || d?.plainLyrics) { found = { synced: d.syncedLyrics || null, plain: d.plainLyrics || null }; break; }
+      const d = await r.json();
+      const list = (Array.isArray(d) ? d : [d]).filter((x) => acceptable(song, x));
+      const pick = list.find((x) => x.syncedLyrics) || list.find((x) => x.plainLyrics);
+      if (pick) { found = { synced: pick.syncedLyrics || null, plain: pick.plainLyrics || null }; break; }
     } catch (e) {
       if (e.name === 'AbortError') throw e;
     }
