@@ -208,6 +208,12 @@ def lyrics_shard(song_id: str) -> int:
 
 # ---------- I/O ----------
 
+def loose_key(title: str | None) -> str:
+    """mkey minus vowels and a leading article/number: catches spelling
+    drift (Paandava Vanavasamu / Pandava Vanavasamu)."""
+    return re.sub(r'[aeiou]', '', mkey(title))
+
+
 def load_film_years() -> dict[str, list[int]]:
     try:
         raw = json.loads(FILM_YEARS_PATH.read_text(encoding='utf-8'))
@@ -333,6 +339,9 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
            verbose: bool = True) -> list[dict]:
     film_years = film_years if film_years is not None else load_film_years()
     stats = Counter()
+    loose_index: dict[str, set[int]] = defaultdict(set)
+    for k, ys in film_years.items():
+        loose_index[re.sub(r'[aeiou]', '', k)].update(ys)
     # 0. Rescue compilation copies whose title names the real film, then
     # drop what's still a compilation or a devotional album.
     for s in songs:
@@ -360,6 +369,21 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
         else:
             kept.append(s)
     songs = kept
+    # Tribute / artist-showcase albums ("Bahudoorapu Batasari - Ghantasala"):
+    # re-releases of old recordings under a modern year, not a film.
+    by_album: dict[str, list[dict]] = defaultdict(list)
+    for s in songs:
+        by_album[s.get('m') or ''].append(s)
+    tribute = set()
+    for movie, group in by_album.items():
+        tail = re.search(r'\s[-–]\s*([^-–]+)$', movie)
+        k = mkey(tail.group(1)) if tail else ''
+        if len(k) >= 4 and len(group) >= 1 and sum(k in mkey(x.get('a')) for x in group) / len(group) >= 0.6 \
+                and mkey(movie) not in film_years:
+            tribute.add(movie)
+    if tribute:
+        stats['drop:tribute-album'] = sum(len(by_album[m]) for m in tribute)
+        songs = [s for s in songs if (s.get('m') or '') not in tribute]
 
     # 1. Classify each song: trusted year, or needs resolving.
     info = {}
@@ -377,7 +401,7 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
         # upload. Legacy placeholder uploads all happened before ~2015.
         ceiling = 2015 if placeholder else (raw + 1 if raw else None)
         info[s['i']] = {
-            'raw': raw, 'ceiling': ceiling, 'compilation': compilation,
+            'raw': raw, 'ceiling': ceiling, 'compilation': compilation, 'song': s,
             'slug_year': None if (compilation or placeholder) else slug_year,
             'suspect': compilation or placeholder or mismatch or raw is None,
             'mk': mkey(s.get('m')), 'tk': mkey(s.get('t')),
@@ -386,10 +410,37 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
               else 'mismatch' if mismatch else 'trusted'] += 1
 
     # 2. Evidence pools built only from trusted songs.
+    # 2a. Singer eras first, so we can re-open "trusted" years that no
+    # singer on the song could plausibly have recorded (1950s voices on a
+    # 2010 "album" are re-releases).
+    singer_years: dict[str, list[int]] = defaultdict(list)
+    for s in songs:
+        inf = info[s['i']]
+        if not inf['suspect']:
+            for a in split_artists(s.get('a')):
+                singer_years[mkey(a)].append(inf['raw'])
+
+    def implausible(s: dict) -> bool:
+        inf = info[s['i']]
+        if inf['suspect'] or not inf['raw']:
+            return False
+        meds = []
+        for a in split_artists(s.get('a')):
+            ys = sorted(singer_years.get(mkey(a), []))
+            if len(ys) < 25:
+                return False          # not enough history to judge
+            meds.append((ys[len(ys) // 10], ys[(9 * len(ys)) // 10]))
+        return bool(meds) and all(inf['raw'] > hi + 18 or inf['raw'] < lo - 18 for lo, hi in meds)
+
+    reopened = [s for s in songs if implausible(s)]
+    for s in reopened:
+        info[s['i']]['suspect'] = True
+    stats['reopened:implausible'] = len(reopened)
+
+    # 2b. Sibling evidence from what is still trusted.
     sib_years: dict[str, Counter] = defaultdict(Counter)
     sib_singers: dict[tuple[str, int], set[str]] = defaultdict(set)
     sib_titles: dict[tuple[str, str], int] = {}
-    singer_years: dict[str, list[int]] = defaultdict(list)
     for s in songs:
         inf = info[s['i']]
         if inf['suspect']:
@@ -397,7 +448,6 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
         sib_years[inf['mk']][inf['raw']] += 1
         sib_titles.setdefault((inf['mk'], inf['tk']), inf['raw'])
         for a in split_artists(s.get('a')):
-            singer_years[mkey(a)].append(inf['raw'])
             sib_singers[(inf['mk'], inf['raw'])].add(mkey(a))
 
     def singer_estimate(group: list[dict]) -> tuple[float | None, bool, tuple[int, int] | None]:
@@ -418,8 +468,14 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
         mk = infs[0]['mk']
         est, confident, active = singer_estimate(group)
         cands: dict[int, float] = defaultdict(float)
-        for y in film_years.get(mk, []):
-            cands[y] += 3
+        wd = film_years.get(mk)
+        if wd:
+            for y in wd:
+                cands[y] += 3
+        else:
+            # Spelling drift: fall back to the vowel-less index (weaker).
+            for y in loose_index.get(loose_key(group[0].get('m')), ()):
+                cands[y] += 2
         singers = {mkey(a) for s in group for a in split_artists(s.get('a'))}
         for y, n in sib_years.get(mk, {}).items():
             # A same-named film only counts fully when it shares singers —
