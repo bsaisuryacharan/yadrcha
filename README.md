@@ -82,7 +82,9 @@ The same step also:
 
 - Rescues `Song (From "Film")` compilation copies onto their real film and
   merges duplicates.
-- Drops label compilations, background scores, OSTs, dialogue tracks,
+- Drops unpopular songs (under 10,000 plays; set `MIN_PLAYS` to change or 0 to
+  disable; songs with no play data inherit their album's median), label
+  compilations, background scores, OSTs, dialogue tracks,
   instrumental covers and devotional albums.
 - Assigns album ids.
 

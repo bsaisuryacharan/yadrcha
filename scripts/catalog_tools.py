@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import statistics
 import sys
@@ -54,6 +55,10 @@ AUDIO_PREFIX = 'https://aac.saavncdn.com/'
 COVER_PREFIX = 'https://c.saavncdn.com/'
 
 NOW_YEAR = datetime.now(timezone.utc).year
+
+# Popularity floor: only well-played songs stay in the catalogue.
+# JioSaavn play counts; override with MIN_PLAYS (0 disables the filter).
+MIN_PLAYS = int(os.environ.get('MIN_PLAYS', '10000'))
 
 
 # ---------- keys ----------
@@ -585,6 +590,30 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
         best[k] = keep
         stats['dedupe'] += 1
     out = list(best.values())
+
+    # 6b. Popularity floor. A song with no play data inherits its album's
+    # median (so a well-known film's untracked songs stay), and a brand-new
+    # release (this or last year) with no data is kept — it hasn't had time
+    # to be played yet.
+    if MIN_PLAYS > 0:
+        by_film_plays: dict[str, list[int]] = defaultdict(list)
+        for s in out:
+            if s.get('p'):
+                by_film_plays[mkey(s.get('m'))].append(s['p'])
+        kept_pop = []
+        for s in out:
+            plays = s.get('p') or 0
+            if not plays:
+                ps = sorted(by_film_plays.get(mkey(s.get('m')), []))
+                if ps:
+                    plays = ps[len(ps) // 2]
+                elif s.get('y') and s['y'] >= NOW_YEAR - 1:
+                    plays = MIN_PLAYS
+            if plays >= MIN_PLAYS:
+                kept_pop.append(s)
+            else:
+                stats['drop:unpopular'] += 1
+        out = kept_pop
 
     # 7. Album ids.
     for s in out:
