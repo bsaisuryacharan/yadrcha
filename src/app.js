@@ -4,6 +4,7 @@ import { catalog } from './catalog.js';
 import { library } from './library.js';
 import { player } from './player.js';
 import { $, h, store, toast } from './util.js';
+import { initTheme } from './theme.js';
 import { syncRows } from './ui/components.js';
 import { initNowPlaying, openPlayer } from './ui/nowplaying.js';
 import { closeAllOverlays } from './ui/overlay.js';
@@ -151,4 +152,5 @@ window.addEventListener('keydown', (e) => {
 
 window.addEventListener('offline', () => toast('You’re offline — playback needs a connection'));
 
+initTheme();
 boot();

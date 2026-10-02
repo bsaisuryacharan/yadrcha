@@ -7,6 +7,7 @@ import { player } from '../player.js';
 import { $, art, coverColor, fmtTime, h, haptic, icon, rgb, toast } from '../util.js';
 import { go, share, songMenu, songRow, syncPlayButtons, syncRows } from './components.js';
 import { dragToDismiss, hasOverlay, openSheet, popOverlay, pushOverlay } from './overlay.js';
+import { onTheme, playerTopColor, setAlbumColor, setChrome } from '../theme.js';
 
 const mini = $('#mini');
 const playerEl = $('#player');
@@ -66,6 +67,7 @@ export function initNowPlaying() {
   swipeX($('#player-art'), (dir) => (dir < 0 ? player.next() : player.prev()), $('#player-art'));
   initSeek();
   initRadioFab();
+  onTheme(syncChrome);   // theme switch while the player is open
 
   player.on('track', onTrack);
   player.on('state', onState);
@@ -108,6 +110,11 @@ function initRadioFab() {
 }
 
 /* ---------- open / close ---------- */
+let tintRGB = null;   // current cover colour, for the status bar
+// While the full player is open, the phone's status bar takes the player's
+// top colour so the cover tint runs edge to edge.
+const syncChrome = () => setChrome(hasOverlay('player') && tintRGB ? playerTopColor(tintRGB) : null);
+
 export function openPlayer() {
   if (!player.current || hasOverlay('player')) return;
   playerEl.classList.add('open');
@@ -115,7 +122,9 @@ export function openPlayer() {
   pushOverlay('player', () => {
     playerEl.classList.remove('open');
     playerEl.setAttribute('aria-hidden', 'true');
+    setChrome(null);
   });
+  syncChrome();
   if (lyricsOn) loadLyrics();
 }
 export function closePlayer() { popOverlay('player'); }
@@ -140,7 +149,11 @@ function onTrack(s) {
   $('#player-ctx-label').textContent = c?.autoplayFrom ? 'Autoplay' : ({ album: 'Playing from album', artist: 'Playing from artist', mix: 'Playing from your mix', liked: 'Playing from', radio: 'Playing from radio', recent: 'Playing from' }[c?.type] || 'Now playing');
   $('#player-ctx-title').textContent = c?.title || 'Yadrcha';
   coverColor(s.cover, s.albumId).then((col) => {
-    if (player.current?.id === s.id) document.documentElement.style.setProperty('--tint', rgb(col));
+    if (player.current?.id !== s.id) return;
+    document.documentElement.style.setProperty('--tint', rgb(col));
+    tintRGB = col;
+    setAlbumColor(col);   // "Album art" accent follows the song
+    syncChrome();
   });
   document.title = `${s.title} · ${s.artist} — Yadrcha`;
   onLikes();
@@ -301,7 +314,7 @@ async function loadLyrics() {
   activeLine = -1;
   const box = $('#lyrics-lines');
   const scroller = $('#lyrics-scroll');
-  box.replaceChildren(h('div.lyrics-empty', h('div', h('div.lyric', { style: { color: 'rgba(255,255,255,.6)', fontSize: '18px' } }, 'Finding lyrics…'))));
+  box.replaceChildren(h('div.lyrics-empty', h('div', h('div.lyric', { style: { color: 'var(--pl-fg-2)', fontSize: '18px' } }, 'Finding lyrics…'))));
   scroller.scrollTop = 0;
   if (lyricsCtrl) lyricsCtrl.abort();
   lyricsCtrl = new AbortController();

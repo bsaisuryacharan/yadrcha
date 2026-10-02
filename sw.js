@@ -3,11 +3,11 @@
 //   * everything same-origin: network-first, cached copy when offline
 //     (catalog.json also falls back when the network is slow)
 // Audio and cover art stream straight from JioSaavn's CDN, uncached.
-const VERSION = 'yadrcha-v5';
+const VERSION = 'yadrcha-v6';
 const SHELL = [
   './', 'index.html', 'assets/app.css', 'assets/icon.svg', 'manifest.webmanifest',
   'src/app.js', 'src/catalog.js', 'src/engine.js', 'src/library.js', 'src/lyrics.js',
-  'src/player.js', 'src/util.js', 'src/ui/components.js', 'src/ui/nowplaying.js',
+  'src/player.js', 'src/theme.js', 'src/util.js', 'src/ui/appearance.js', 'src/ui/components.js', 'src/ui/nowplaying.js',
   'src/ui/overlay.js', 'src/ui/pages.js',
   'assets/fonts/symbols.woff2', 'assets/fonts/jakarta-latin.woff2', 'assets/fonts/jakarta-latin-ext.woff2',
 ];

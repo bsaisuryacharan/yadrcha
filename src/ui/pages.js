@@ -9,6 +9,7 @@ import { art, collage, coverColor, debounce, fmtTotal, greeting, h, haptic, hash
 import {
   albumCard, artistCard, contextPlayButton, eraChips, go, mixCard, rail, section, share, songMenu, songRow, syncRows, yearPicker,
 } from './components.js';
+import { openAppearance } from './appearance.js';
 
 const NOW = new Date().getFullYear();
 const WORKER = 'https://yadrcha-ai.bcharan197.workers.dev';
@@ -50,6 +51,7 @@ export function HomePage() {
     frag.append(h('header.top',
       h('div.brand-dot', { 'aria-hidden': 'true' }),
       h('div.greet', h('small', new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })), h('h1', greeting())),
+      h('button.icon-btn', { type: 'button', 'aria-label': 'Appearance', onclick: openAppearance }, icon('palette')),
       h('a.icon-btn', { href: '#/recent', 'aria-label': 'Recently played' }, icon('history'))));
 
     frag.append(eraChips(f, (nf) => { library.setPref('filter', nf); lastFilter = filterKey(nf); render(); el.scrollTo({ top: 0 }); }));
@@ -364,6 +366,7 @@ export function LibraryPage() {
   const render = () => {
     el.replaceChildren();
     el.append(h('header.top', h('div.brand-dot'), h('h1', 'Your Library'),
+      h('button.icon-btn', { type: 'button', 'aria-label': 'Appearance', onclick: openAppearance }, icon('palette')),
       h('a.icon-btn', { href: '#/search?focus=1', 'aria-label': 'Search' }, icon('search'))));
 
     const mins = Math.round(library.stats.seconds / 60);

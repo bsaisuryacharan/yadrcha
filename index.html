@@ -4,7 +4,28 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
 <meta name="theme-color" content="#0a0a0d" />
-<meta name="color-scheme" content="dark" />
+<meta name="color-scheme" content="dark light" />
+<script>
+  // Apply the saved theme before first paint so a reload never flashes the
+  // wrong colours (src/theme.js writes this cache).
+  (function () {
+    try {
+      var c = JSON.parse(localStorage.getItem('yadrcha.theme.v1') || 'null') || {};
+      var light = { cool: 1, cloud: 1 };
+      var id = c.theme === 'auto'
+        ? (matchMedia('(prefers-color-scheme: light)').matches ? 'cool' : 'midnight')
+        : (c.resolved || 'midnight');
+      var d = document.documentElement;
+      d.setAttribute('data-theme', id);
+      d.setAttribute('data-mode', light[id] ? 'light' : 'dark');
+      if (c.resolved === id && c.ac) {
+        d.style.setProperty('--accent', c.ac);
+        d.style.setProperty('--accent-ink', c.ink);
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', c.bg);
+      }
+    } catch (e) {}
+  })();
+</script>
 <meta name="description" content="Yadrcha — endless random Telugu film music. Pick an era or a year, play whole albums, never hear a repeat." />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />

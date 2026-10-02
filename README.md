@@ -39,6 +39,16 @@ browser menu ("Add to Home screen") and it runs full-screen like a native app.
 - **Search** over songs, films and singers, tolerant of Telugu
   transliteration ("Swathi Muthyam" also finds "Swati Mutyam"), with a
   fallback to all of JioSaavn.
+- **Appearance.** Six themes plus Auto (follows the phone's light/dark
+  setting): Midnight, AMOLED Black (true black for OLED screens), Nord Dusk,
+  Mocha (Catppuccin), Cool White, and Cloud Dancer (Pantone's 2026 Colour of
+  the Year, #F0EEE9). Accents: Mint, Ocean, Violet, Rose, Saffron, the theme's
+  own, or *Album*, which re-colours the app from each song's cover art and
+  morphs between songs. Every accent is re-tuned per theme to keep WCAG AA
+  contrast (≥4.5:1). Switching ripples the new theme out from your finger
+  (View Transitions API), the phone's status bar follows the theme (and the
+  player's tint while it is open), and an inline script in `index.html`
+  applies the saved theme before first paint so reloads never flash.
 - **Library.** Liked songs, saved albums, followed artists, recently played
   and listening stats. Stored on your device; no account needed.
 - **Picks up where you left off.** The current song, position and queue
@@ -118,11 +128,13 @@ src/app.js            boot + hash router (#/album/…, #/artist/…, #/era/…, 
 src/catalog.js        catalogue loading, albums/artists/years indexes, search
 src/engine.js         no-repeat radio picks, daily mixes, albums of the day
 src/player.js         playback engine: contexts, queue, shuffle/repeat, sleep timer, MediaSession, session restore
+src/theme.js          themes, accent tuning (WCAG contrast), theme-switch animation
 src/library.js        likes, saved albums, followed artists, history, "heard" memory (localStorage)
 src/lyrics.js         lyrics shards + live LRCLIB fallback
 src/ui/pages.js       Home, Search, Explore, Library, Album, Artist, Era/Year, Mix, Liked, Recent
 src/ui/nowplaying.js  mini player, full player, lyrics view, queue
 src/ui/components.js  rows, cards, song menu, era chips, year picker, sleep timer
+src/ui/appearance.js  Appearance sheet: theme previews + accent swatches
 src/ui/overlay.js     bottom sheets + back-gesture handling
 ```
 
