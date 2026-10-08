@@ -116,10 +116,12 @@ The same step also:
   year's releases get 10k / 50k while they catch up. `MIN_PLAYS` scales the
   bars (0 disables them).
 - Dubbed films (a "(Telugu)" release Wikidata doesn't know as a Telugu film,
-  or a cast led by a Tamil, Hindi, Kannada or Malayalam star) stay only if
-  they were big hits (a 1M-play song).
+  or a cast led by a Tamil, Hindi, Kannada or Malayalam star) and albums
+  JioSaavn lists without a cast stay only if they were big hits (a 1M-play
+  song): *Bharateeyudu* and *Aparichithudu* stay, minor dubs and private
+  albums go. A film Wikidata knows as Telugu is never treated as a dub.
 - Drops what isn't a film song: label compilations, artist showcases,
-  standalone singles, private albums with no cast, devotional albums,
+  standalone singles, devotional and hymn albums,
   background scores and BGM themes, music bits, teasers, speeches, tracks
   under 90 seconds, dialogue tracks, instrumental covers and other-language
   versions.

@@ -214,7 +214,7 @@ DEVOTIONAL_RE = re.compile(
     r'swamy saranam|bhagavan sh?aranam|deity of the day|sai ?baba|shirdi|harathi|harathulu|aarti|'
     r'slokas?|namavali|ashtakam|chalisa|mantras?|jayant?hi|jathara|bonalu|'
     r'bathukamma|christmas|hosanna|yesayya|ministries|ganasudha|sangrah|'
-    r'divya ganam|madhura sudha|naamam|aditya hrudayam|sahasranamam?|hanuman chalisa)\b',
+    r'divya ganam|madhura sudha|naamam|hymns?|aditya hrudayam|sahasranamam?|hanuman chalisa)\b',
     re.IGNORECASE,
 )
 _MOTION_PICTURE_RE = re.compile(r'motion picture|soundtrack', re.IGNORECASE)
@@ -311,13 +311,20 @@ LANG_SUFFIX_RE = re.compile(
 
 
 def name_tokens(names: str | None) -> set[str]:
-    """Spelling-proof tokens of people's names: 'S. Thaman' / 'Thaman S'
-    → {'tmn'}, 'Ilaiyaraaja' / 'Ilayaraja' → {'lrj'}."""
+    """Spelling-proof keys for a list of people ("A, B & C"). Each person
+    gives their consonants run together ('S.A. Raj Kumar' and 'S. A.
+    Rajkumar' → 'srjkmr'), the same with the words sorted ('S. Thaman' and
+    'Thaman S' → '#stmn'), and any distinctive long word ('Balasubrahmanyam' →
+    'blsbrmnm'), so formatting differences still match."""
     out = set()
-    for w in re.split(r'[^a-z]+', (names or '').lower()):
-        c = _consonants(mkey(w))
-        if len(c) >= 3:
-            out.add(c)
+    for person in split_artists(names):
+        words = [_consonants(mkey(w)) for w in re.split(r'[^a-z]+', person.lower()) if w]
+        words = [w for w in words if w]
+        if not words:
+            continue
+        out.add(''.join(words))
+        out.add('#' + ''.join(sorted(words)))
+        out.update(w for w in words if len(w) >= 5)
     return out
 
 
@@ -541,9 +548,13 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
         by the refresh), or a "(Telugu)" release that Wikidata doesn't know
         as a Telugu film of about that year. Releases from the last year get
         the benefit of the doubt (Wikidata lags) until the cast check runs."""
+        if wiki(movie)[0] is not None:
+            # Wikidata knows it as a Telugu film (Kamal Haasan's Telugu
+            # films, Mammootty's Swathi Kiranam): not a dub, whoever leads.
+            return False
         if any(s.get('db') for s in group):
             return True
-        if not LANG_SUFFIX_RE.search(movie or '') or wiki(movie)[0] is not None:
+        if not LANG_SUFFIX_RE.search(movie or ''):
             return False
         near, _ = films.lookup(movie)
         if near and year and any(abs(year - w) <= 2 for w in near):
@@ -581,10 +592,6 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
         elif (DEVOTIONAL_RE.search(movie) and not _MOTION_PICTURE_RE.search(movie)
               and not known_film):
             stats['drop:devotional'] += 1
-        elif s.get('nf') and not known_film:
-            # JioSaavn lists no cast and Wikidata knows no such film:
-            # a private album (devotional, folk, indie single).
-            stats['drop:not-a-film'] += 1
         elif not known_film and mkey(movie) == mkey(title):
             # Album named after its only song = a standalone single.
             stats['drop:single'] += 1
@@ -752,7 +759,11 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
         for y in wd or ():
             fit = composer_fit(group, y)
             if fit is False:
-                continue          # a namesake film with another composer
+                # Probably a namesake with another composer — but JioSaavn's
+                # composer credits are sometimes wrong, so keep it as a
+                # weak fallback rather than nothing.
+                cands[y] += 0.5
+                continue
             # Spelling-drift matches are a little weaker than exact ones;
             # a matching composer makes either decisive.
             cands[y] += (3 if how == 'exact' else 2) + (2 if fit else 0)
@@ -917,7 +928,10 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
             floor, bar = popularity_bars(year)
             movie = group[0].get('m')
             dub = is_dub(movie, year, group)
-            if dub:
+            # No cast on JioSaavn and unknown to Wikidata: a private album
+            # (devotional, folk, indie) or an old dub — big hits only.
+            castless = wiki(movie)[0] is None and any(s.get('nf') for s in group)
+            if dub or castless:
                 bar = max(bar, DUB_ALBUM_BAR)
             plays = sorted(s['p'] for s in group if s.get('p'))
             if not plays:
@@ -927,7 +941,8 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
                     stats['drop:unverified'] += len(group)
                 continue
             if plays[-1] < bar:
-                stats['drop:obscure-dub' if dub else 'drop:obscure-film'] += len(group)
+                stats['drop:obscure-dub' if dub else 'drop:not-a-film' if castless
+                      else 'drop:obscure-film'] += len(group)
                 continue
             median = plays[len(plays) // 2]
             for s in group:
