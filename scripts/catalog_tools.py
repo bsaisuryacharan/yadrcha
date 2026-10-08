@@ -801,7 +801,10 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
             # Ghantasala song from the 2006 one.
             # When the singers are confidently placed, nothing outside their
             # careers survives (better the singers' own era than a namesake).
-            inside = {y: w for y, w in cands.items() if active[0] <= y <= active[1]}
+            # A Wikidata film with the same composer survives regardless
+            # (JioSaavn's singer credits are the less reliable side).
+            inside = {y: w for y, w in cands.items()
+                      if active[0] <= y <= active[1] or (y in (wd or ()) and composer_fit(group, y))}
             cands = inside if (inside or confident) else cands
         if est is not None:
             # Same-name remakes decades apart: the singers decide.
