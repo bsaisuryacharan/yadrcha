@@ -49,6 +49,8 @@ ROOT = Path(__file__).resolve().parent.parent
 CATALOG_PATH = ROOT / 'catalog.json'
 LYRICS_DIR = ROOT / 'lyrics'
 FILM_YEARS_PATH = ROOT / 'data' / 'film_years.json'
+OVERRIDES_PATH = ROOT / 'data' / 'year_overrides.json'
+COMPOSERS_PATH = ROOT / 'data' / 'film_composers.json'
 LYRICS_SHARDS = 64
 
 AUDIO_PREFIX = 'https://aac.saavncdn.com/'
@@ -56,9 +58,29 @@ COVER_PREFIX = 'https://c.saavncdn.com/'
 
 NOW_YEAR = datetime.now(timezone.utc).year
 
-# Popularity floor: only well-played songs stay in the catalogue.
-# JioSaavn play counts; override with MIN_PLAYS (0 disables the filter).
+# Popularity: only well-played songs from films people actually know stay.
+# JioSaavn play counts grow with streaming-era reach, so the bars rise with
+# the era: a 1960s classic with 30k plays is a hit, a 2010s song with 30k
+# is a deep cut nobody asked for. Each era has
+#   (song floor, album bar): a song needs `song floor` plays itself, and its
+#   film's biggest song needs `album bar` (otherwise the whole film is
+#   obscure and goes).
+# MIN_PLAYS scales the song floors (default 10000 = the table below; 0
+# disables the popularity filter entirely).
 MIN_PLAYS = int(os.environ.get('MIN_PLAYS', '10000'))
+_ERA_BARS = ((1990, 10_000, 25_000), (2000, 25_000, 100_000), (9999, 50_000, 250_000))
+_FRESH_BARS = (10_000, 50_000)         # this year's and last year's releases
+DUB_ALBUM_BAR = 1_000_000              # dubbed films: only the big hits
+
+
+def popularity_bars(year: int | None) -> tuple[int, int]:
+    scale = MIN_PLAYS / 10_000
+    if year and year >= NOW_YEAR - 1:
+        f, a = _FRESH_BARS
+    else:
+        y = year or 2000
+        f, a = next((f, a) for top, f, a in _ERA_BARS if y < top)
+    return int(f * scale), int(a * scale)
 
 
 # ---------- keys ----------
@@ -79,8 +101,10 @@ def mkey(s: str | None) -> str:
     for a, b in _DIGRAPHS:
         s = s.replace(a, b)
     s = s.replace('h', '')
-    s = re.sub(r'(.)\1+', r'\1', s)
-    return s
+    collapsed = re.sub(r'(.)\1+', r'\1', s)
+    # Collapsing doubled letters would turn RRR into "r": keep very short
+    # titles as they are.
+    return collapsed if len(collapsed) >= 3 else s
 
 
 def split_artists(a: str | None) -> list[str]:
@@ -108,6 +132,10 @@ def slug_matches_movie(slug_name: str | None, movie: str) -> bool | None:
     """None when the slug carries no usable name (ART-00213, SONY_...)."""
     if not slug_name or re.match(r'^(art|sony|sncd|inh|inr)\b', slug_name, re.I):
         return None
+    # A film single's art: "Rana-Kumbha-From-Varanasi".
+    single = re.search(r'-from-(.+)$', slug_name, re.I)
+    if single:
+        slug_name = single.group(1)
     a, b = mkey(slug_name.replace('-', ' ')), mkey(movie)
     if len(a) < 3:
         return None
@@ -147,7 +175,7 @@ COMPILATION_RE = re.compile(
     r'ganapathy|ekadantaya|bhagawadh? geetha|jai shri ram|yesanna|yesey|prabhu|translation|'
     r'nightingale|magic of|dance with|dance dynamite|fantastic 9|youth stars|golden years|'
     r'swarasudha|icon star|love failure|propose day|classic marvel|way to peace|glimpse|'
-    r'live at|vibes?|vol(?:ume)?\.? ?-? ?\d+|(?<!99 )songs)\b',
+    r'live at|vibes?|vol(?:ume)?\.? ?-? ?\d+|(?<!99 )songs|the versions|^i am|all rounder)\b',
     re.IGNORECASE,
 )
 # Background scores, OSTs, dialogue tracks and instrumental covers: no
@@ -156,9 +184,19 @@ NON_SONG_RE = re.compile(
     r'background score|\bbgm\b|\bost\b|\bost[’\']?s\b|original sound tracks?\b|theme music|'
     r'original score|bg score|\binstrumental\b|\binterludes?\b|\b(?:dialogues?|dailogues?|'
     r'dialouges?|dialogs?)\b|\bviolin\b|\bveena\b|\bflute\b|\bsaxophone\b|\bpiano\b|'
-    r'\bremix(?:es)?\b|\blo-?fi\b|\bmashup\b|\breggaeton\b|\b\w+ mix\)?$',
+    r'\bremix(?:es)?\b|\blo-?fi\b|\bmashup\b|\breggaeton\b|\b\w+ mix\)?$|'
+    r'dappu beat|\bdj\b.*\b(?:mix|beat|remix)\b|\bfolk\b',
     re.IGNORECASE,
 )
+# Song titles that are clips, not songs: BGM themes, music bits, teasers,
+# speeches. ("Title Song" and "Theme Song" are real songs.)
+CLIP_TITLE_RE = re.compile(
+    r'\btheme\b(?!\s*song)|\bmusic bit\b|\bbit\s*(?:song|\d)?\s*\)?$|^bit\b|\bteaser\b|\bpromo\b|'
+    r'\btrailer\b|\bglimpse\b|\bspeech\b|\bkaraoke\b|\bthe intro\b|^intro\b|\bsignature tune\b|'
+    r'\bvoice of\b|\bnarration\b',
+    re.IGNORECASE,
+)
+MIN_SONG_SECONDS = 90      # shorter tracks are bits, jingles and padyam snippets
 _YEAR_TAGGED_RE = re.compile(r'\b(?:19|20)\d{2}\b')
 _GENERIC_TERMS_RE = re.compile(
     r'\b(hits?|songs?|telugu|tollywood|pop|romantic|dance|sad|love|fresh|'
@@ -172,10 +210,11 @@ _GENERIC_TERMS_RE = re.compile(
 # knows them as films or JioSaavn labels them a motion-picture soundtrack.
 DEVOTIONAL_RE = re.compile(
     r'\b(patal[au]|geeth?alu|geetamrutham|bhajans?|keerthan(?:a|alu)|stotram|'
-    r'suprabhatha?m|ayyappa|devotional|sai ?baba|shirdi|harathi|harathulu|aarti|'
+    r'suprabhat\w*|ayyappa|ayyapan|devotional|smarani|smarami|manasa ?smarami|govinda namalu|'
+    r'swamy saranam|bhagavan sh?aranam|deity of the day|sai ?baba|shirdi|harathi|harathulu|aarti|'
     r'slokas?|namavali|ashtakam|chalisa|mantras?|jayant?hi|jathara|bonalu|'
     r'bathukamma|christmas|hosanna|yesayya|ministries|ganasudha|sangrah|'
-    r'divya ganam|madhura sudha|naamam)\b',
+    r'divya ganam|madhura sudha|naamam|aditya hrudayam|sahasranamam?|hanuman chalisa)\b',
     re.IGNORECASE,
 )
 _MOTION_PICTURE_RE = re.compile(r'motion picture|soundtrack', re.IGNORECASE)
@@ -217,6 +256,118 @@ def loose_key(title: str | None) -> str:
     """mkey minus vowels and a leading article/number: catches spelling
     drift (Paandava Vanavasamu / Pandava Vanavasamu)."""
     return re.sub(r'[aeiou]', '', mkey(title))
+
+
+def _consonants(k: str) -> str:
+    return re.sub(r'[aeiouy]', '', k)
+
+
+class FilmIndex:
+    """Wikidata Telugu film titles → release years, tolerant of JioSaavn's
+    spelling: exact phonetic key, then the same consonants (Bombai /
+    Bombay Priyudu), then a long-enough prefix of the full title
+    (Aravindha Sametha → Aravinda Sametha Veera Raghava)."""
+
+    def __init__(self, film_years: dict[str, list[int]]):
+        self.exact = film_years
+        self.loose: dict[str, set[str]] = defaultdict(set)
+        for k in film_years:
+            self.loose[_consonants(k)].add(k)
+        self.keys = sorted(film_years)
+
+    def lookup(self, movie: str | None, fuzzy: bool = True) -> tuple[list[int] | None, str | None]:
+        k = mkey(movie)
+        if len(k) < 2:
+            return None, None
+        if k in self.exact:
+            return self.exact[k], 'exact'
+        if not fuzzy:
+            return None, None
+        c = _consonants(k)
+        if len(c) >= 4:
+            near = [o for o in self.loose.get(c, ()) if SequenceMatcher(None, k, o).ratio() >= 0.8]
+            if near:
+                return sorted({y for o in near for y in self.exact[o]}), 'loose'
+        if len(k) >= 10:
+            import bisect
+            i = bisect.bisect_left(self.keys, k)
+            longer = []
+            while i < len(self.keys) and self.keys[i].startswith(k) and len(longer) < 3:
+                longer.append(self.keys[i])
+                i += 1
+            if 1 <= len(longer) <= 2:
+                return sorted({y for o in longer for y in self.exact[o]}), 'prefix'
+        return None, None
+
+
+# "Petta (Telugu)", "Dhoom:3 - Telugu", "Jawan (TELUGU)": a multi-language
+# release. With no Telugu film of that name on Wikidata it is a dub.
+# "They Call Him OG (Kannada)": another language's release of a film.
+OTHER_LANG_RE = re.compile(
+    r'\(\s*(?:kannada|tamil|hindi|malayalam|marathi|bengali|english)\s*(?:version)?\s*\)|'
+    r'[-–]\s*(?:kannada|tamil|hindi|malayalam)\b', re.IGNORECASE)
+LANG_SUFFIX_RE = re.compile(
+    r'(?:\(\s*telugu\s*(?:version)?\s*\)|[-–]\s*telugu(?:\s+version)?)', re.IGNORECASE)
+
+
+def name_tokens(names: str | None) -> set[str]:
+    """Spelling-proof tokens of people's names: 'S. Thaman' / 'Thaman S'
+    → {'tmn'}, 'Ilaiyaraaja' / 'Ilayaraja' → {'lrj'}."""
+    out = set()
+    for w in re.split(r'[^a-z]+', (names or '').lower()):
+        c = _consonants(mkey(w))
+        if len(c) >= 3:
+            out.add(c)
+    return out
+
+
+def load_film_composers() -> dict[tuple[str, int], set[str]]:
+    """data/film_composers.json ("Title|year": [composers], from Wikidata)
+    → {(film key, year): name tokens}."""
+    try:
+        raw = json.loads(COMPOSERS_PATH.read_text(encoding='utf-8'))
+    except Exception:
+        return {}
+    out: dict[tuple[str, int], set[str]] = defaultdict(set)
+    for k, names in raw.items():
+        title, _, year = k.rpartition('|')
+        if year.isdigit():
+            for n in names:
+                out[(mkey(title), int(year))] |= name_tokens(n)
+    return dict(out)
+
+
+def save_film_composers(extra: dict[str, list[str]]) -> None:
+    try:
+        cur = json.loads(COMPOSERS_PATH.read_text(encoding='utf-8'))
+    except Exception:
+        cur = {}
+    for k, names in extra.items():
+        cur[k] = sorted(set(cur.get(k, [])) | set(names))
+    body = ',\n'.join(f'{json.dumps(k, ensure_ascii=False)}:{json.dumps(v, ensure_ascii=False)}'
+                      for k, v in sorted(cur.items()))
+    COMPOSERS_PATH.write_text('{\n' + body + '\n}\n', encoding='utf-8')
+
+
+def override_key(film: str | None) -> str:
+    """Like mkey but keeps bracketed qualifiers: Gharshana (Old) and
+    Gharshana (New) are different films."""
+    return mkey((film or '').replace('(', ' ').replace(')', ' ').replace('[', ' ').replace(']', ' '))
+
+
+def load_overrides() -> dict[tuple[str, str], int]:
+    """data/year_overrides.json → {(film key, title-prefix key): year}."""
+    try:
+        raw = json.loads(OVERRIDES_PATH.read_text(encoding='utf-8'))
+    except Exception:
+        return {}
+    out = {}
+    for k, y in raw.items():
+        if k.startswith('_'):
+            continue
+        film, _, title = k.partition('|')
+        out[(override_key(film), mkey(title))] = int(y)
+    return out
 
 
 def load_film_years() -> dict[str, list[int]]:
@@ -286,7 +437,7 @@ def load_catalog() -> list[dict]:
 
 
 KEY_ORDER = ['i', 't', 'a', 'm', 'md', 'y', 'yo', 'd', 'p', 'b', 'al', 'u', 'c',
-             'l', 'nl', 'x', 'ad']
+             'l', 'nl', 'x', 'nf', 'db', 'ad']
 
 
 def save_catalog(songs: list[dict]) -> None:
@@ -336,6 +487,12 @@ def _raw_year(s: dict) -> int | None:
         return None
 
 
+def recording_key(s: dict) -> tuple[str, frozenset]:
+    """Same title, same singers = the same recording, whichever album it
+    was uploaded on."""
+    return mkey(s.get('t')), frozenset(mkey(a) for a in split_artists(s.get('a')))
+
+
 def _quality(s: dict) -> tuple:
     return (0 if s.get('x') else 1, 1 if s.get('lr') else 0, s.get('p') or 0)
 
@@ -343,10 +500,55 @@ def _quality(s: dict) -> tuple:
 def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
            verbose: bool = True) -> list[dict]:
     film_years = film_years if film_years is not None else load_film_years()
+    films = FilmIndex(film_years)
     stats = Counter()
-    loose_index: dict[str, set[int]] = defaultdict(set)
-    for k, ys in film_years.items():
-        loose_index[re.sub(r'[aeiou]', '', k)].update(ys)
+    _film_cache: dict[tuple[str, bool], tuple] = {}
+
+    def wiki(movie: str | None) -> tuple[list[int] | None, str | None]:
+        """Wikidata years for an album. A "(Telugu)"-suffixed album only
+        matches a Telugu film exactly — fuzzy hits there are other films
+        (Kaththi (Telugu) is not the 2006 Kathi)."""
+        m = movie or ''
+        fuzzy = not LANG_SUFFIX_RE.search(m)
+        key = (m, fuzzy)
+        if key not in _film_cache:
+            _film_cache[key] = films.lookup(m, fuzzy=fuzzy)
+        return _film_cache[key]
+
+    composers = load_film_composers()
+
+    def composer_fit(group: list[dict], year: int) -> bool | None:
+        """Does the Wikidata film of this name and year have the same
+        composer as these songs? None when either side is unknown. Keeps
+        a 2026 Keeravani song off the 2021 Varanasi."""
+        want = set()
+        for k in {mkey(group[0].get('m'))} | {o for o in films.loose.get(_consonants(mkey(group[0].get('m'))), ())}:
+            want |= composers.get((k, year), set())
+        if not want:
+            return None
+        have = set()
+        for s in group:
+            have |= name_tokens(s.get('md'))
+        if not have:
+            # Composers often sing on their own albums.
+            for s in group:
+                have |= name_tokens(s.get('a'))
+            return True if want & have else None
+        return bool(want & have)
+
+    def is_dub(movie: str | None, year: int | None, group: list[dict]) -> bool:
+        """A dubbed film: JioSaavn's cast lists a non-Telugu lead (`db`, set
+        by the refresh), or a "(Telugu)" release that Wikidata doesn't know
+        as a Telugu film of about that year. Releases from the last year get
+        the benefit of the doubt (Wikidata lags) until the cast check runs."""
+        if any(s.get('db') for s in group):
+            return True
+        if not LANG_SUFFIX_RE.search(movie or '') or wiki(movie)[0] is not None:
+            return False
+        near, _ = films.lookup(movie)
+        if near and year and any(abs(year - w) <= 2 for w in near):
+            return False
+        return not (year and year >= NOW_YEAR - 1)
     # 0. Rescue compilation copies whose title names the real film, then
     # drop what's still a compilation or a devotional album.
     for s in songs:
@@ -364,28 +566,46 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
     kept = []
     for s in songs:
         movie = s.get('m') or ''
+        title = s.get('t') or ''
+        known_film = wiki(movie)[0] is not None
         if is_compilation(movie, film_years):
             stats['drop:compilation-album'] += 1
-        elif NON_SONG_RE.search(movie) or NON_SONG_RE.search(s.get('t') or ''):
+        elif NON_SONG_RE.search(movie) or NON_SONG_RE.search(title):
             stats['drop:score-or-dialogue'] += 1
+        elif OTHER_LANG_RE.search(movie):
+            stats['drop:other-language'] += 1
+        elif CLIP_TITLE_RE.search(title):
+            stats['drop:theme-or-clip'] += 1
+        elif (s.get('d') or 999) < MIN_SONG_SECONDS:
+            stats['drop:too-short'] += 1
         elif (DEVOTIONAL_RE.search(movie) and not _MOTION_PICTURE_RE.search(movie)
-              and mkey(movie) not in film_years):
+              and not known_film):
             stats['drop:devotional'] += 1
+        elif s.get('nf') and not known_film:
+            # JioSaavn lists no cast and Wikidata knows no such film:
+            # a private album (devotional, folk, indie single).
+            stats['drop:not-a-film'] += 1
+        elif not known_film and mkey(movie) == mkey(title):
+            # Album named after its only song = a standalone single.
+            stats['drop:single'] += 1
         else:
             kept.append(s)
     songs = kept
-    # Tribute / artist-showcase albums ("Bahudoorapu Batasari - Ghantasala"):
-    # re-releases of old recordings under a modern year, not a film.
+    # Tribute / artist-showcase albums ("Bahudoorapu Batasari - Ghantasala",
+    # "Sid Sriram - The All Rounder"): an album named after its own singer
+    # is a re-release anthology, not a film.
     by_album: dict[str, list[dict]] = defaultdict(list)
     for s in songs:
         by_album[s.get('m') or ''].append(s)
     tribute = set()
     for movie, group in by_album.items():
-        tail = re.search(r'\s[-–]\s*([^-–]+)$', movie)
-        k = mkey(tail.group(1)) if tail else ''
-        if len(k) >= 4 and len(group) >= 1 and sum(k in mkey(x.get('a')) for x in group) / len(group) >= 0.6 \
-                and mkey(movie) not in film_years:
-            tribute.add(movie)
+        if wiki(movie)[0] is not None:
+            continue
+        for part in re.split(r'\s[-–:]\s*', movie)[:3]:
+            k = mkey(part)
+            if len(k) >= 6 and sum(k in mkey(x.get('a')) for x in group) / len(group) >= 0.6:
+                tribute.add(movie)
+                break
     if tribute:
         stats['drop:tribute-album'] = sum(len(by_album[m]) for m in tribute)
         songs = [s for s in songs if (s.get('m') or '') not in tribute]
@@ -396,6 +616,11 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
         raw = _raw_year(s)
         name, slug_year, legacy = cover_slug(s.get('c') or '')
         match = slug_matches_movie(name, s.get('m', ''))
+        # Film-single art ("Song-From-Film") vouches for the film even if an
+        # earlier run had flagged the song as a compilation copy.
+        single_art = bool(match) and bool(re.search(r'-from-', name or '', re.I))
+        if single_art:
+            s.pop('x', None)
         compilation = bool(s.get('x')) or match is False
         placeholder = legacy and slug_year == 2000 and raw == 2000
         mismatch = (not compilation and slug_year is not None and raw is not None
@@ -435,25 +660,12 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
             if len(ys) < 25:
                 return False          # not enough history to judge
             meds.append((ys[len(ys) // 10], ys[(9 * len(ys)) // 10]))
-        return bool(meds) and all(inf['raw'] > hi + 18 or inf['raw'] < lo - 18 for lo, hi in meds)
+        return bool(meds) and all(inf['raw'] > hi + 15 or inf['raw'] < lo - 15 for lo, hi in meds)
 
     reopened = [s for s in songs if implausible(s)]
     for s in reopened:
         info[s['i']]['suspect'] = True
     stats['reopened:implausible'] = len(reopened)
-
-    # 2b. Sibling evidence from what is still trusted.
-    sib_years: dict[str, Counter] = defaultdict(Counter)
-    sib_singers: dict[tuple[str, int], set[str]] = defaultdict(set)
-    sib_titles: dict[tuple[str, str], int] = {}
-    for s in songs:
-        inf = info[s['i']]
-        if inf['suspect']:
-            continue
-        sib_years[inf['mk']][inf['raw']] += 1
-        sib_titles.setdefault((inf['mk'], inf['tk']), inf['raw'])
-        for a in split_artists(s.get('a')):
-            sib_singers[(inf['mk'], inf['raw'])].add(mkey(a))
 
     def singer_estimate(group: list[dict]) -> tuple[float | None, bool, tuple[int, int] | None]:
         """(median year, confident?, plausible active range) of the singers
@@ -466,32 +678,93 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
             return None, False, None
         ys.sort()
         q1, q3 = ys[len(ys) // 4], ys[(3 * len(ys)) // 4]
-        return statistics.median(ys), (q3 - q1) <= 12, (q1 - 12, q3 + 12)
+        confident = (q3 - q1) <= 12
+        # Singers with a narrow career get a tight window (a 2017 debut
+        # can't sing on a 2005 film); wide careers get a generous one.
+        p10, p90 = ys[len(ys) // 10], ys[(9 * len(ys)) // 10]
+        active = (p10 - 5, p90 + 5) if confident and len(ys) >= 12 else (q1 - 12, q3 + 12)
+        return statistics.median(ys), confident, active
+
+    # 2a'. Re-uploads: JioSaavn re-released hundreds of 90s soundtracks in
+    # 2013-14 under the upload year (Pelli Sandadi "2014" is 1996). When
+    # Wikidata knows the film, no Wikidata year is within a year of ours,
+    # and the singers' era is clearly nearer a Wikidata year, the year is
+    # re-opened and resolved with that Wikidata year as the lead.
+    trusted_groups: dict[tuple[str, int], list[dict]] = defaultdict(list)
+    for s in songs:
+        inf = info[s['i']]
+        if not inf['suspect'] and inf['raw']:
+            trusted_groups[(s.get('m') or '', inf['raw'])].append(s)
+    for (movie, raw), group in trusted_groups.items():
+        wd, _how = wiki(movie)
+        if not wd or any(abs(raw - w) <= 1 for w in wd):
+            continue
+        est, _confident, active = singer_estimate(group)
+        if est is None:
+            continue
+        # Only earlier films: JioSaavn can't have had a song before its film
+        # came out, so a later namesake is never the answer.
+        fits = [w for w in wd if w <= raw + 1 and (not active or active[0] <= w <= active[1])
+                and composer_fit(group, w) is not False]
+        if not fits:
+            continue
+        w = min(fits, key=lambda y: abs(y - est))
+        # A film Wikidata knows by exactly this name, released at least three
+        # years before JioSaavn's date, is the classic re-upload: accept it
+        # unless the singers clearly point elsewhere. Otherwise the singers
+        # must clearly prefer the Wikidata year.
+        reupload = (_how == 'exact' and len(wd) == 1 and raw - w >= 3
+                    and not LANG_SUFFIX_RE.search(movie)
+                    and abs(est - w) <= abs(est - raw) + 5)
+        if reupload or abs(est - w) + 3 < abs(est - raw):
+            for s in group:
+                inf = info[s['i']]
+                inf.update(suspect=True, wd_hint=w, slug_year=None)
+            stats['reopened:wikidata'] += len(group)
+
+    # 2b. Sibling evidence from what is still trusted.
+    sib_years: dict[str, Counter] = defaultdict(Counter)
+    sib_singers: dict[tuple[str, int], set[str]] = defaultdict(set)
+    sib_titles: dict[tuple[str, str], int] = {}
+    # The same recording (title + singers) on a film's own album: copies on
+    # compilations and re-uploads adopt that album's film and year.
+    recordings: dict[tuple[str, frozenset], dict] = {}
+    for s in songs:
+        inf = info[s['i']]
+        if inf['suspect']:
+            continue
+        sib_years[inf['mk']][inf['raw']] += 1
+        k = (inf['mk'], inf['tk'])
+        sib_titles[k] = min(sib_titles.get(k, inf['raw']), inf['raw'])
+        if not s.get('x'):
+            rk = recording_key(s)
+            if rk not in recordings or inf['raw'] < info[recordings[rk]['i']]['raw']:
+                recordings[rk] = s
+        for a in split_artists(s.get('a')):
+            sib_singers[(inf['mk'], inf['raw'])].add(mkey(a))
 
     def resolve(group: list[dict]) -> int | None:
         infs = [info[s['i']] for s in group]
         mk = infs[0]['mk']
         est, confident, active = singer_estimate(group)
         cands: dict[int, float] = defaultdict(float)
-        wd = film_years.get(mk)
-        if wd:
-            for y in wd:
-                cands[y] += 3
-        else:
-            # Spelling drift: fall back to the vowel-less index (weaker).
-            for y in loose_index.get(loose_key(group[0].get('m')), ()):
-                cands[y] += 2
+        wd, how = wiki(group[0].get('m'))
+        for y in wd or ():
+            fit = composer_fit(group, y)
+            if fit is False:
+                continue          # a namesake film with another composer
+            # Spelling-drift matches are a little weaker than exact ones;
+            # a matching composer makes either decisive.
+            cands[y] += (3 if how == 'exact' else 2) + (2 if fit else 0)
+        for inf in infs:
+            if inf.get('wd_hint'):
+                cands[inf['wd_hint']] += 2 / len(infs)
         singers = {mkey(a) for s in group for a in split_artists(s.get('a'))}
         for y, n in sib_years.get(mk, {}).items():
             # A same-named film only counts fully when it shares singers —
             # otherwise it's probably the remake.
             shared = bool(singers & sib_singers.get((mk, y), set()))
             cands[y] += (2 if shared else 0.6) + min(n, 5) * 0.1
-        for s in group:
-            # Keep an earlier repair unless stronger evidence has appeared,
-            # so daily runs don't flip-flop.
-            if 'yo' in s and s.get('y'):
-                cands[s['y']] += 1.5 / len(group)
         for inf in infs:
             if inf['slug_year']:
                 cands[inf['slug_year']] += 1 / len(infs)
@@ -499,12 +772,26 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
             # still weak evidence when nothing else exists.
             if inf['raw'] and not inf['compilation'] and inf['raw'] != 2000:
                 cands[inf['raw']] += 0.5 / len(infs)
+        for s in group:
+            # Keep an earlier repair so daily runs don't flip-flop — but only
+            # while some evidence still backs it (a year that has lost all
+            # its evidence was a mistake).
+            if 'yo' in s and s.get('y') in cands:
+                cands[s['y']] += 2.5 / len(group)
+        raws = [inf['raw'] for inf in infs if inf['raw'] and inf['raw'] != 2000]
+        if est is None and raws:
+            # Nobody on the song has a track record, and the upload is from
+            # decades after this candidate film: a namesake, not this film.
+            cands = {y: w for y, w in cands.items() if y >= min(raws) - 25}
         ceiling = min([inf['ceiling'] for inf in infs if inf['ceiling']] or [NOW_YEAR])
         cands = {y: w for y, w in cands.items() if 1930 <= y <= min(ceiling, NOW_YEAR)}
         if active:
             # A Chakri song can't be from the 1953 Devadasu, nor a
             # Ghantasala song from the 2006 one.
-            cands = {y: w for y, w in cands.items() if active[0] <= y <= active[1]} or cands
+            # When the singers are confidently placed, nothing outside their
+            # careers survives (better the singers' own era than a namesake).
+            inside = {y: w for y, w in cands.items() if active[0] <= y <= active[1]}
+            cands = inside if (inside or confident) else cands
         if est is not None:
             # Same-name remakes decades apart: the singers decide.
             pull = 2.5 if confident else 1.0
@@ -515,6 +802,13 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
             stats['fix:evidence'] += len(group)
             return max(cands, key=lambda y: (cands[y], -abs(y - ref)))
         if est is not None and confident:
+            # A compilation's year is an upper bound; prefer it unless the
+            # singers clearly belong to an older era.
+            if raws and est >= min(raws) - 10:
+                # Same era: the compilation's year is an upper bound and the
+                # singers' median a centre; split the difference.
+                stats['fix:upload-year'] += len(group)
+                return int((est + min(raws)) / 2 + 0.5)
             stats['fix:singer-era'] += len(group)
             return int(round(est))
         stats['fix:unknown'] += len(group)
@@ -527,6 +821,14 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
         inf = info[s['i']]
         if not inf['suspect']:
             s['y'] = inf['raw']
+        elif recording_key(s) in recordings and recordings[recording_key(s)] is not s:
+            src = recordings[recording_key(s)]
+            s['y'] = info[src['i']]['raw']
+            if mkey(s.get('m')) != mkey(src.get('m')):
+                s['m'] = src.get('m')
+                inf['mk'] = info[src['i']]['mk']
+                s['x'] = 1
+            stats['fix:same-recording'] += 1
         elif (inf['mk'], inf['tk']) in sib_titles:
             s['y'] = sib_titles[(inf['mk'], inf['tk'])]
             stats['fix:sibling-title'] += 1
@@ -551,6 +853,16 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
                 continue
             s['y'] = max((y for y in years if abs(y - s['y']) <= 1),
                          key=lambda y: (years[y], -y))
+    # 4b. Hand-checked overrides (data/year_overrides.json).
+    overrides = load_overrides()
+    if overrides:
+        for s in songs:
+            mk, tk = override_key(s.get('m')), mkey(s.get('t'))
+            y = overrides.get((mk, '')) or next(
+                (y for (f, t), y in overrides.items() if f == mk and t and tk.startswith(t)), None)
+            if y and s['y'] != y:
+                s['y'] = y
+                stats['fix:override'] += 1
     for s in songs:
         raw = info[s['i']]['raw']
         if raw is None:
@@ -591,28 +903,38 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
         stats['dedupe'] += 1
     out = list(best.values())
 
-    # 6b. Popularity floor. A song with no play data inherits its album's
-    # median (so a well-known film's untracked songs stay), and a brand-new
-    # release (this or last year) with no data is kept — it hasn't had time
-    # to be played yet.
+    # 6b. Popularity (see popularity_bars). Judged per film first — an
+    # obscure film goes whole — then per song. A song with no play data yet
+    # inherits its film's median; a film with no play data at all stays
+    # only if Wikidata knows it (the next refresh fetches real counts).
+    # Dubbed films must be big hits.
     if MIN_PLAYS > 0:
-        by_film_plays: dict[str, list[int]] = defaultdict(list)
+        albums: dict[tuple[str, int | None], list[dict]] = defaultdict(list)
         for s in out:
-            if s.get('p'):
-                by_film_plays[mkey(s.get('m'))].append(s['p'])
+            albums[(info[s['i']]['mk'], s['y'])].append(s)
         kept_pop = []
-        for s in out:
-            plays = s.get('p') or 0
+        for (_mk, year), group in albums.items():
+            floor, bar = popularity_bars(year)
+            movie = group[0].get('m')
+            dub = is_dub(movie, year, group)
+            if dub:
+                bar = max(bar, DUB_ALBUM_BAR)
+            plays = sorted(s['p'] for s in group if s.get('p'))
             if not plays:
-                ps = sorted(by_film_plays.get(mkey(s.get('m')), []))
-                if ps:
-                    plays = ps[len(ps) // 2]
-                elif s.get('y') and s['y'] >= NOW_YEAR - 1:
-                    plays = MIN_PLAYS
-            if plays >= MIN_PLAYS:
-                kept_pop.append(s)
-            else:
-                stats['drop:unpopular'] += 1
+                if wiki(movie)[0] is not None or (year and year >= NOW_YEAR - 1):
+                    kept_pop.extend(group)
+                else:
+                    stats['drop:unverified'] += len(group)
+                continue
+            if plays[-1] < bar:
+                stats['drop:obscure-dub' if dub else 'drop:obscure-film'] += len(group)
+                continue
+            median = plays[len(plays) // 2]
+            for s in group:
+                if (s.get('p') or median) >= floor:
+                    kept_pop.append(s)
+                else:
+                    stats['drop:unpopular-song'] += 1
         out = kept_pop
 
     # 7. Album ids.

@@ -291,7 +291,8 @@ SELECT (GROUP_CONCAT(?r; separator="|") AS ?all) WHERE {
     ?f wdt:P31 wd:Q11424; wdt:P364 wd:Q8097; wdt:P577 ?d.
     { ?f rdfs:label ?l } UNION { ?f skos:altLabel ?l }
     FILTER(LANG(?l)="en")
-    BIND(CONCAT(STR(?l),"~",STR(YEAR(?d))) AS ?r)
+    OPTIONAL { ?f wdt:P86 ?c. ?c rdfs:label ?cl. FILTER(LANG(?cl)="en") }
+    BIND(CONCAT(STR(?l),"~",STR(YEAR(?d)),"~",COALESCE(STR(?cl),"")) AS ?r)
   }
 }'''
 
@@ -307,12 +308,21 @@ def refresh_film_years() -> None:
         r.raise_for_status()
         blob = r.json()['results']['bindings'][0]['all']['value']
         films: dict[str, set[int]] = {}
+        composers: dict[str, set[str]] = {}
         for row in blob.split('|'):
-            title, _, year = row.rpartition('~')
+            parts = row.split('~')
+            if len(parts) < 2:
+                continue
+            title, year = '~'.join(parts[:-2] if len(parts) >= 3 else parts[:-1]).strip(), \
+                (parts[-2] if len(parts) >= 3 else parts[-1])
+            composer = parts[-1].strip() if len(parts) >= 3 else ''
             if title and year.isdigit():
-                films.setdefault(title.strip(), set()).add(int(year))
+                films.setdefault(title, set()).add(int(year))
+                if composer:
+                    composers.setdefault(f'{title}|{year}', set()).add(composer)
         catalog_tools.save_film_years({k: sorted(v) for k, v in films.items()})
-        print(f'Wikidata: {len(films)} Telugu film titles')
+        catalog_tools.save_film_composers({k: sorted(v) for k, v in composers.items()})
+        print(f'Wikidata: {len(films)} Telugu film titles, {len(composers)} with composers')
     except Exception as e:
         print(f'  ! Wikidata refresh skipped: {e}', file=sys.stderr)
 
@@ -482,6 +492,36 @@ def is_film_song(d: dict) -> bool:
     return label_match or has_starring or movie_album
 
 
+# First-billed actors whose films reach Telugu as dubs. A JioSaavn album led
+# by one of them is a dubbed film (`db`), which must be a big hit to stay.
+NON_TELUGU_LEADS = {catalog_tools.mkey(n) for n in (
+    'Rajinikanth', 'Kamal Haasan', 'Thalapathy Vijay', 'Vijay Joseph', 'Ajith Kumar', 'Ajith',
+    'Suriya', 'Surya Sivakumar', 'Karthi', 'Dhanush', 'Chiyaan Vikram', 'Sivakarthikeyan',
+    'Vijay Sethupathi', 'Silambarasan', 'Silambarasan TR', 'STR', 'Jayam Ravi', 'Ravi Mohan',
+    'Arya', 'Jiiva', 'Udhayanidhi Stalin', 'Pradeep Ranganathan', 'Kavin', 'Raghava Lawrence',
+    'Vishal', 'Arvind Swamy', 'Prashanth', 'Madhavan', 'R. Madhavan', 'Simbu', 'Sasikumar',
+    'Shah Rukh Khan', 'Salman Khan', 'Aamir Khan', 'Ranbir Kapoor', 'Hrithik Roshan',
+    'Akshay Kumar', 'Ranveer Singh', 'Ajay Devgn', 'Tiger Shroff', 'Varun Dhawan',
+    'Kartik Aaryan', 'Shahid Kapoor', 'Sidharth Malhotra', 'Vicky Kaushal', 'Amitabh Bachchan',
+    'Yash', 'Kichcha Sudeepa', 'Sudeep', 'Darshan', 'Puneeth Rajkumar', 'Shiva Rajkumar',
+    'Shivarajkumar', 'Rishab Shetty', 'Rakshit Shetty', 'Mohanlal', 'Mammootty',
+    'Prithviraj Sukumaran', 'Fahadh Faasil', 'Tovino Thomas', 'Nivin Pauly', 'Unni Mukundan',
+)}
+
+
+def cast_flags(d: dict) -> dict:
+    """`nf` = JioSaavn lists no cast (not a film soundtrack); `db` = a
+    non-Telugu star leads the cast (a dub). Only set when the response
+    actually carries a `starring` field."""
+    if 'starring' not in d:
+        return {}
+    starring = clean_text(d.get('starring') or '')
+    if not starring:
+        return {'nf': 1}
+    lead = catalog_tools.mkey(re.split(r'\s*,\s*', starring)[0])
+    return {'db': 1} if lead in NON_TELUGU_LEADS else {}
+
+
 def normalize_detail(d: dict) -> dict | None:
     if not d:
         return None
@@ -539,7 +579,134 @@ def normalize_detail(d: dict) -> dict | None:
         row['md'] = music
     if d.get('albumid') and not real_movie:
         row['al'] = str(d['albumid'])
+    row.update(cast_flags(d))
     return row
+
+
+# ---------- Requalify ----------
+
+# Every song is re-checked against JioSaavn about once a month: fresh play
+# counts (the popularity bars in catalog_tools), cast (film or not, dub or
+# not), language, composer, and a freshly decrypted stream URL. The last
+# check date per song lives in data/checked.json.
+CHECKED_PATH = catalog_tools.ROOT / 'data' / 'checked.json'
+REQUALIFY_DAYS = int(os.environ.get('REQUALIFY_DAYS', '30'))
+REQUALIFY_BATCH = 20
+
+
+def _load_checked() -> dict[str, str]:
+    try:
+        return json.loads(CHECKED_PATH.read_text(encoding='utf-8'))
+    except Exception:
+        return {}
+
+
+def _save_checked(checked: dict[str, str]) -> None:
+    CHECKED_PATH.write_text(json.dumps(dict(sorted(checked.items())), separators=(',', ':')) + '\n',
+                            encoding='utf-8')
+
+
+def details_batch(ids: list[str]) -> dict[str, dict] | None:
+    """song.getDetails for several ids at once → {id: detail}. None when
+    the call itself failed (so nothing is judged missing)."""
+    res = jio_get('song.getDetails', {'pids': ','.join(ids)}, max_attempts=3)
+    if not res:
+        return None
+    rows = res.get('songs') if isinstance(res.get('songs'), list) else \
+        [v for v in res.values() if isinstance(v, dict) and v.get('id')]
+    return {r['id']: r for r in rows if isinstance(r, dict) and r.get('id')}
+
+
+def apply_detail(s: dict, d: dict) -> bool:
+    """Refresh one catalogue row from a JioSaavn detail. False = the song
+    no longer qualifies (not Telugu any more)."""
+    if (d.get('language') or 'telugu').lower() != 'telugu':
+        return False
+    try:
+        if d.get('play_count') not in (None, ''):
+            s['p'] = int(d['play_count'])
+    except (TypeError, ValueError):
+        pass
+    music = clean_text(d.get('music') or '')
+    if music:
+        s['md'] = music
+    s.pop('nf', None)
+    s.pop('db', None)
+    s.update(cast_flags(d))
+    enc = d.get('encrypted_media_url')
+    if enc:
+        url = decrypt_media_url(enc)
+        if url:
+            s['u'] = upgrade_quality(url)
+    return True
+
+
+def requalify(by_id: dict[str, dict], checked: dict[str, str]) -> None:
+    cutoff = (datetime.now(timezone.utc).date().toordinal() - REQUALIFY_DAYS)
+    def due(s):
+        d = checked.get(s['i'])
+        return not d or datetime.strptime(d, '%Y-%m-%d').date().toordinal() <= cutoff
+    todo = sorted((s for s in by_id.values() if due(s)), key=lambda s: checked.get(s['i'], ''))
+    # Multi-id lookups are ~20x faster; fall back to one id per call if
+    # JioSaavn won't answer them.
+    size = REQUALIFY_BATCH
+    if todo:
+        probe = details_batch([s['i'] for s in todo[:5]])
+        if not probe or len(probe) < 2:
+            size = 1
+            print('  multi-id lookup unavailable — checking one song per call')
+    batches = [todo[i:i + size] for i in range(0, len(todo), size)]
+    print(f'Requalify: {len(todo)} songs due ({len(batches)} batches)')
+    stats = {'ok': 0, 'gone': 0, 'not-telugu': 0, 'no-cast': 0, 'dub': 0, 'failed': 0}
+    gone: list[str] = []
+
+    def work(batch):
+        if over_budget(0.30):
+            return batch, None
+        return batch, details_batch([s['i'] for s in batch])
+
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        for n, fut in enumerate(as_completed([ex.submit(work, b) for b in batches]), 1):
+            batch, got = fut.result()
+            if not got:
+                # A failed call, or one that answered with nothing at all:
+                # judge nothing, retry next run.
+                stats['failed'] += len(batch)
+                continue
+            for s in batch:
+                d = got.get(s['i'])
+                if d is None:
+                    # A batch that answered for its other songs but not this
+                    # one: double-check alone before calling it gone.
+                    single = details_batch([s['i']]) if len(batch) > 1 else got
+                    d = (single or {}).get(s['i'])
+                    if d is None:
+                        if single is not None and got:
+                            gone.append(s['i'])
+                            stats['gone'] += 1
+                        else:
+                            stats['failed'] += 1
+                        continue
+                if apply_detail(s, d):
+                    stats['ok'] += 1
+                    stats['no-cast'] += 1 if s.get('nf') else 0
+                    stats['dub'] += 1 if s.get('db') else 0
+                else:
+                    gone.append(s['i'])
+                    stats['not-telugu'] += 1
+                checked[s['i']] = TODAY
+            if n % 50 == 0:
+                print(f'  requalify {n}/{len(batches)} batches | {stats}')
+    # Safety net: if JioSaavn stopped sending cast data, "no cast" would be
+    # nearly everything — don't let that empty the catalogue.
+    if stats['ok'] and stats['no-cast'] / stats['ok'] > 0.6:
+        print(f'  ! {stats["no-cast"]}/{stats["ok"]} without cast — ignoring cast flags this run',
+              file=sys.stderr)
+        for s in by_id.values():
+            s.pop('nf', None)
+    for i in gone:
+        by_id.pop(i, None)
+    print(f'Requalify done: {stats}')
 
 
 # ---------- Catalog I/O ----------
@@ -561,6 +728,12 @@ def main() -> int:
     refresh_film_years()
     FILM_YEARS.clear()
     FILM_YEARS.update(catalog_tools.load_film_years())
+
+    # 0. Re-check existing songs (play counts, cast, language, stream URL).
+    checked = _load_checked()
+    requalify(by_id, checked)
+    _save_checked(checked)
+    save_catalog(list(by_id.values()))
 
     # Today's year-sweep queries go first (they're what makes each run add
     # a new slice of every era), then the broad queries in shuffled order so
@@ -685,6 +858,7 @@ def main() -> int:
 
     for n in normalized:
         by_id[n['i']] = n
+        checked[n['i']] = TODAY
         found += 1
 
     # Bank the free wins immediately so they survive even if the network
@@ -717,6 +891,7 @@ def main() -> int:
                 song = None
             if song and song.get('u'):
                 by_id[song['i']] = song
+                checked[song['i']] = TODAY
                 found += 1
             else:
                 failed += 1
@@ -782,6 +957,7 @@ def main() -> int:
 
     by_id = {s['i']: s for s in catalog_tools.repair(list(by_id.values()), verbose=False)}
     save_catalog(list(by_id.values()))
+    _save_checked({i: d for i, d in checked.items() if i in by_id})
 
     total = len(by_id)
     with_lyrics = sum(1 for s in by_id.values() if 'lr' in s)

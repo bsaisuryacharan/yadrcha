@@ -61,18 +61,22 @@ Songs come from **JioSaavn** (full-length streams from its CDN). A daily
 GitHub Action (`.github/workflows/refresh-catalog.yml`) runs
 `scripts/refresh_catalog.py`, which:
 
-1. Searches JioSaavn with ~110 broad queries, plus a **rotating year sweep**
+1. **Re-checks existing songs** about once a month (`data/checked.json`): fresh
+   play counts, cast (to tell film soundtracks from private albums and
+   dubs), language, composer and a freshly decrypted stream URL. Songs
+   JioSaavn has removed or relabelled leave the catalogue.
+2. Searches JioSaavn with ~110 broad queries, plus a **rotating year sweep**
    (a different slice of film years every day, so each era keeps growing) and
    the **new-releases feed**.
-2. Expands the albums behind those hits into full soundtracks, taking
+3. Expands the albums behind those hits into full soundtracks, taking
    never-expanded albums first.
-3. Keeps Telugu film songs only, decrypts the stream URL, and probes LRCLIB
+4. Keeps Telugu film songs only, decrypts the stream URL, and probes LRCLIB
    for synced lyrics (`scripts/lyrics_probe.py`: exact match, then searches by
    title, first singer and film; a result is accepted only if title and
    duration match). Songs first checked with the old exact-only probe are
    retried, most popular first, up to `MAX_LYRICS` (900) per run. The app also
    does a live lookup with the same checks for songs the build hasn't matched.
-4. Runs `scripts/catalog_tools.py` (below) and commits the result.
+5. Runs `scripts/catalog_tools.py` (below) and commits the result.
 
 ### Year repair (`scripts/catalog_tools.py`)
 
@@ -83,23 +87,42 @@ JioSaavn's `year` field is often wrong for older films. That is why the old
   (`Swati-Mutyam-2000-500x500.jpg` is a 1986 film).
 - Songs lifted onto label compilations ("Alanati Suswaralu 2018",
   "Romantic 90's") carry the compilation's year.
-- Some re-uploads carry the upload year (Karna 2013 is really 1995).
+- Re-uploads carry the upload year: hundreds of 90s soundtracks were
+  re-released in 2013–14 (*Pelli Sandadi* "2014" is 1996, *Rowdy Alludu* is
+  1991, *Karna* "2013" is 1995).
 
 Each song is re-dated from its raw JioSaavn year (kept as `yo`, so reruns are
-stable). Each album upload is dated as a unit, using this evidence: a sibling
-song of the same film with a trustworthy year, **Wikidata** Telugu film
-release years (`data/film_years.json`, refreshed each run), the year in the
-cover file name, and the singers' active years. The singers also rule out
-same-named remakes: a Chakri song can't belong to the 1953 *Devadasu*.
+stable). Each album upload is dated as a unit, using this evidence: the same
+recording (title + singers) on the film's own album, a sibling song of the
+same film with a trustworthy year, **Wikidata** Telugu film release years and
+composers (`data/film_years.json`, `data/film_composers.json`, refreshed each
+run; titles match across spellings like *Bombai*/*Bombay Priyudu*), the year
+in the cover file name, and the singers' active years. Even a year JioSaavn
+states plainly is re-opened when Wikidata dates that film years earlier and
+the singers agree. Singers and composers rule out namesakes: a Chakri song
+can't belong to the 1953 *Devadasu*, and a Keeravani song isn't from a 2021
+*Varanasi* by another composer. A film is never moved to a year after
+JioSaavn already had its songs. The few cases this can't settle (JioSaavn
+merging two films under one name) are pinned in `data/year_overrides.json`.
 
 The same step also:
 
 - Rescues `Song (From "Film")` compilation copies onto their real film and
   merges duplicates.
-- Drops unpopular songs (under 10,000 plays; set `MIN_PLAYS` to change or 0 to
-  disable; songs with no play data inherit their album's median), label
-  compilations, background scores, OSTs, dialogue tracks,
-  instrumental covers and devotional albums.
+- Keeps the collection to songs people actually play. Popularity bars rise
+  with the era, because streaming counts do: a song needs 10k plays
+  (before 1990), 25k (1990s) or 50k (2000 on), and its film's biggest song
+  needs 25k / 100k / 250k, or the whole film is too obscure. This and last
+  year's releases get 10k / 50k while they catch up. `MIN_PLAYS` scales the
+  bars (0 disables them).
+- Dubbed films (a "(Telugu)" release Wikidata doesn't know as a Telugu film,
+  or a cast led by a Tamil, Hindi, Kannada or Malayalam star) stay only if
+  they were big hits (a 1M-play song).
+- Drops what isn't a film song: label compilations, artist showcases,
+  standalone singles, private albums with no cast, devotional albums,
+  background scores and BGM themes, music bits, teasers, speeches, tracks
+  under 90 seconds, dialogue tracks, instrumental covers and other-language
+  versions.
 - Assigns album ids.
 
 Run it by hand with `python scripts/catalog_tools.py`.

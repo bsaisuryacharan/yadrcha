@@ -60,14 +60,16 @@ jobs:
             echo "No changes to commit"
             exit 0
           fi
-          # If main moved during this run, prefer the workflow's (newer)
-          # catalog over whatever main has. The script always reads main's
-          # catalog at start and merges new songs in, so its output is
-          # the authoritative latest state.
+          # Commit back to the branch this run started from (main for the
+          # daily schedule; a feature branch when run by hand from one).
+          # If the branch moved during this run, prefer the workflow's
+          # (newer) catalog: the script read the branch's catalog at start
+          # and merged new songs in, so its output is the latest state.
+          BRANCH="${GITHUB_REF_NAME}"
           git stash
-          git fetch origin
-          git reset --hard origin/main
+          git fetch origin "$BRANCH"
+          git reset --hard "origin/$BRANCH"
           git stash pop
           git add catalog.json lyrics data
           git commit -m "chore: refresh catalog $(date -u +%Y-%m-%d) [skip ci]"
-          git push
+          git push origin "HEAD:$BRANCH"
