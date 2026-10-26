@@ -34,6 +34,7 @@ import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 from pathlib import Path
 from threading import Lock
 
@@ -128,7 +129,10 @@ MAX_DETAILS = int(os.environ.get('MAX_DETAILS', '600'))
 # work; coverage accumulates across daily runs because album/lyrics targets
 # are shuffled (different slice each day) and progress is persisted.
 TIME_BUDGET_MIN = float(os.environ.get('TIME_BUDGET_MIN', '38'))
-MAX_ALBUMS = int(os.environ.get('MAX_ALBUMS', '350'))    # albums to expand / run
+MAX_ALBUMS = int(os.environ.get('MAX_ALBUMS', '700'))    # albums to expand / run
+FILM_SWEEP_PER_DAY = int(os.environ.get('FILM_SWEEP_PER_DAY', '180'))  # Wikidata films searched / run
+ALBUM_RECHECK_DAYS = 45      # an expanded album isn't opened again for this long
+FILM_RESEARCH_DAYS = 120     # a film that wasn't found is searched again after this
 MAX_LYRICS = int(os.environ.get('MAX_LYRICS', '900'))    # lyrics probes / run
 
 _START = time.monotonic()
@@ -268,6 +272,58 @@ def album_songs(album_id: str) -> list[dict]:
     return res.get('songs') or res.get('list') or []
 
 
+def search_albums(query: str, n: int = 20, page: int = 1) -> list[dict]:
+    """JioSaavn album search → [{id, title, year, language}] (tolerant of
+    the response shape)."""
+    res = jio_get('search.getAlbumResults', {'q': query, 'p': str(page), 'n': str(n)}, max_attempts=2)
+    out = []
+    for r in (res or {}).get('results') or []:
+        if not isinstance(r, dict):
+            continue
+        more = r.get('more_info') or {}
+        aid = r.get('albumid') or r.get('id')
+        title = clean_text(r.get('title') or r.get('album') or '')
+        try:
+            year = int(r.get('year') or more.get('year') or 0) or None
+        except (TypeError, ValueError):
+            year = None
+        lang = (r.get('language') or more.get('language') or '').lower()
+        if aid and title:
+            out.append({'id': str(aid), 'title': title, 'year': year, 'language': lang})
+    return out
+
+
+def _same_film(album_title: str, film_title: str) -> bool:
+    a, b = catalog_tools.mkey(album_title), catalog_tools.mkey(film_title)
+    if not a or not b:
+        return False
+    if a == b or catalog_tools._consonants(a) == catalog_tools._consonants(b):
+        return True
+    return len(b) >= 6 and SequenceMatcher(None, a, b).ratio() >= 0.88
+
+
+def film_album_ids(title: str, years: list[int]) -> list[str]:
+    """JioSaavn albums for one Wikidata film: same title (across spellings),
+    Telugu, released within a year of the film. Album search first, then
+    song search as a fallback."""
+    def fits(alb_title, alb_year, lang):
+        if lang and lang != 'telugu':
+            return False
+        if not _same_film(alb_title, title):
+            return False
+        return not alb_year or not years or any(abs(alb_year - y) <= 1 for y in years)
+    ids = [a['id'] for a in search_albums(title, n=10) if fits(a['title'], a['year'], a['language'])]
+    if not ids:
+        for r in search_songs(f'{title} telugu', pages=1):
+            try:
+                y = int(r.get('year') or 0) or None
+            except (TypeError, ValueError):
+                y = None
+            if r.get('albumid') and fits(clean_text(r.get('album') or ''), y, (r.get('language') or '').lower()):
+                ids.append(str(r['albumid']))
+    return list(dict.fromkeys(ids))
+
+
 def new_release_album_ids() -> list[str]:
     """Latest Telugu albums from JioSaavn's new-releases feed. Best effort —
     the endpoint is undocumented, so any shape change just yields []."""
@@ -282,7 +338,15 @@ def new_release_album_ids() -> list[str]:
             aid = a.get('albumid') or a.get('id')
             if aid:
                 ids.append(str(aid))
-    return ids
+    # The feed above has gone quiet; album search by year is the reliable
+    # route to this and last year's releases.
+    this_year = datetime.now(timezone.utc).year
+    for q in (f'telugu {this_year}', f'{this_year} telugu movie', f'telugu {this_year - 1}'):
+        for page in (1, 2):
+            for a in search_albums(q, n=40, page=page):
+                if a['language'] in ('', 'telugu') and (a['year'] or 0) >= this_year - 1:
+                    ids.append(a['id'])
+    return list(dict.fromkeys(ids))
 
 
 WIKIDATA_QUERY = '''
@@ -583,6 +647,68 @@ def normalize_detail(d: dict) -> dict | None:
     return row
 
 
+# ---------- Discovery memory ----------
+
+# What earlier runs already looked at, so each day spends its budget on
+# albums and films it hasn't seen: {"albums": {id: date}, "films": {title: date}}.
+DISCOVERY_PATH = catalog_tools.ROOT / 'data' / 'discovery.json'
+
+
+def _load_discovery() -> dict:
+    try:
+        d = json.loads(DISCOVERY_PATH.read_text(encoding='utf-8'))
+    except Exception:
+        d = {}
+    return {'albums': d.get('albums') or {}, 'films': d.get('films') or {}}
+
+
+def _save_discovery(d: dict) -> None:
+    keep_after = datetime.now(timezone.utc).date().toordinal() - 365
+    def recent(v):
+        try:
+            return datetime.strptime(v, '%Y-%m-%d').date().toordinal() >= keep_after
+        except ValueError:
+            return False
+    out = {k: {i: v for i, v in sorted(d[k].items()) if recent(v)} for k in ('albums', 'films')}
+    DISCOVERY_PATH.write_text(json.dumps(out, ensure_ascii=False, separators=(',', ':')) + '\n',
+                              encoding='utf-8')
+
+
+def _days_since(date_str: str | None) -> int:
+    if not date_str:
+        return 10 ** 6
+    try:
+        return datetime.now(timezone.utc).date().toordinal() - datetime.strptime(date_str, '%Y-%m-%d').date().toordinal()
+    except ValueError:
+        return 10 ** 6
+
+
+def films_to_sweep(by_id: dict[str, dict], discovery: dict, limit: int) -> list[tuple[str, list[int]]]:
+    """Wikidata Telugu films with no album in the catalogue yet, not searched
+    in the last FILM_RESEARCH_DAYS — never-searched first, a different
+    random slice each day."""
+    try:
+        raw = json.loads(catalog_tools.FILM_YEARS_PATH.read_text(encoding='utf-8'))
+    except Exception:
+        return []
+    have = {catalog_tools.mkey(s.get('m')) for s in by_id.values()}
+    have_c = {catalog_tools._consonants(k) for k in have}
+    todo, seen = [], set()
+    for title, years in raw.items():
+        k = catalog_tools.mkey(title)
+        if len(k) < 3 or k in have or catalog_tools._consonants(k) in have_c or k in seen:
+            continue
+        if re.search(r'dubbed|\(tamil|\(hindi|\(kannada|\(malayalam', title, re.I):
+            continue
+        if _days_since(discovery['films'].get(title)) < FILM_RESEARCH_DAYS:
+            continue
+        seen.add(k)
+        todo.append((title, sorted(int(y) for y in years)))
+    random.shuffle(todo)
+    todo.sort(key=lambda t: t[0] in discovery['films'])
+    return todo[:limit]
+
+
 # ---------- Requalify ----------
 
 # Every song is re-checked against JioSaavn about once a month: fresh play
@@ -714,8 +840,39 @@ def requalify(by_id: dict[str, dict], checked: dict[str, str]) -> None:
 TODAY = datetime.now(timezone.utc).strftime('%Y-%m-%d')
 
 
+REQUIRED = ('i', 't', 'a', 'm', 'u', 'c')
+
+
+def valid_row(s: dict) -> bool:
+    """A row the app can play: id, title, singers, film, a JioSaavn stream
+    and cover, a sane duration."""
+    return (all(s.get(k) for k in REQUIRED)
+            and str(s['u']).startswith(catalog_tools.AUDIO_PREFIX)
+            and str(s['c']).startswith('https://')
+            and 30 <= int(s.get('d') or 0) <= 1800)
+
+
+_BASELINE: set[str] = set()      # song ids at the start of the run
+
+
 def save_catalog(songs: list[dict]) -> None:
-    catalog_tools.save_catalog(songs)
+    """Every save — including the incremental ones — goes through the full
+    quality repair, so even a run that dies half-way can only ever commit a
+    clean catalogue. An incremental save that would lose a large share of
+    the starting catalogue is skipped (the final save decides, see main)."""
+    out = catalog_tools.repair([s for s in songs if valid_row(s)], verbose=False)
+    if _BASELINE:
+        lost = len(_BASELINE - {s['i'] for s in out})
+        if lost > max(150, MAX_SHRINK * len(_BASELINE)) + 300:
+            print(f'  ! incremental save skipped: would drop {lost} existing songs', file=sys.stderr)
+            return
+    catalog_tools.save_catalog(out)
+
+
+# A run may legitimately drop songs (JioSaavn removed them, or they fell
+# under the popularity bars), but never a large share of the catalogue at
+# once: that would be a bug or a bad upstream response, not news.
+MAX_SHRINK = float(os.environ.get('MAX_SHRINK', '0.03'))
 
 
 # ---------- Main ----------
@@ -724,6 +881,8 @@ def main() -> int:
     print('=== Yadrcha catalog refresh (JioSaavn) ===')
     by_id: dict[str, dict] = {s['i']: s for s in catalog_tools.load_catalog()}
     existing_count = len(by_id)
+    original = [dict(s) for s in by_id.values()]
+    _BASELINE.update(by_id)
     print(f'Loaded {existing_count} existing songs')
     refresh_film_years()
     FILM_YEARS.clear()
@@ -731,7 +890,9 @@ def main() -> int:
 
     # 0. Re-check existing songs (play counts, cast, language, stream URL).
     checked = _load_checked()
+    before = len(by_id)
     requalify(by_id, checked)
+    removed_upstream = before - len(by_id)     # gone from JioSaavn / not Telugu
     _save_checked(checked)
     save_catalog(list(by_id.values()))
 
@@ -778,6 +939,27 @@ def main() -> int:
 
     print(f'Search phase: {len(candidates)} new candidates, {len(album_ids)} unique albums seen')
 
+    # 1b. Film sweep: look up Wikidata Telugu films the catalogue doesn't
+    # have yet, a slice a day, so every known film gets tried in turn.
+    discovery = _load_discovery()
+    sweep_albums: list[str] = []
+    films = films_to_sweep(by_id, discovery, FILM_SWEEP_PER_DAY)
+    found_films = 0
+    for n, (title, years) in enumerate(films, 1):
+        if over_budget(0.35):
+            print(f'  … film sweep budget reached at {n}/{len(films)} ({elapsed():.0f}s)')
+            break
+        ids = film_album_ids(title, years)
+        discovery['films'][title] = TODAY
+        if ids:
+            found_films += 1
+        for aid in ids:
+            seen_albums.add(aid)
+            sweep_albums.append(aid)
+        time.sleep(0.3)
+    print(f'Film sweep: {len(films)} missing films searched, {found_films} found on JioSaavn '
+          f'({len(sweep_albums)} albums)')
+
     # 2. Album expansion — for each unique album (movie soundtrack), fetch
     # ALL songs in it. Search only returns 1-2 popular per album; albums
     # have 5-15 songs each. This is where the multiplier comes from.
@@ -788,18 +970,23 @@ def main() -> int:
     # different slice of albums is expanded each day, so coverage still
     # grows over time.
     # Albums we've never expanded come before ones already in the catalog.
+    # Albums opened in the last ALBUM_RECHECK_DAYS are skipped (new releases
+    # excepted: their track lists still grow).
     random.shuffle(album_ids)
-    album_ids.sort(key=lambda a: a in known_albums)
-    album_targets = (fresh_albums + album_ids)[:MAX_ALBUMS]
+    album_ids = [a for a in album_ids if _days_since(discovery['albums'].get(a)) >= ALBUM_RECHECK_DAYS]
+    album_ids.sort(key=lambda a: (a in known_albums, a in discovery['albums']))
+    sweep_albums = [a for a in sweep_albums if _days_since(discovery['albums'].get(a)) >= ALBUM_RECHECK_DAYS]
+    album_targets = list(dict.fromkeys(fresh_albums + sweep_albums + album_ids))[:MAX_ALBUMS]
     print(f'Expanding {len(album_targets)} of {len(album_ids)} albums (cap {MAX_ALBUMS})...')
     album_expansion_added = 0
     albums_done = 0
     for j, aid in enumerate(album_targets, 1):
-        if over_budget(0.45):
+        if over_budget(0.60):
             print(f'  … album budget reached at {j}/{len(album_targets)} ({elapsed():.0f}s)')
             break
         songs = album_songs(aid)
         albums_done = j
+        discovery['albums'][aid] = TODAY
         for song in songs:
             sid = song.get('id')
             if not sid:
@@ -811,6 +998,7 @@ def main() -> int:
         if j % 25 == 0:
             print(f'  album {j}/{len(album_targets)} | added {album_expansion_added} songs from albums')
         time.sleep(0.4)
+    _save_discovery(discovery)
     print(f'Album expansion: {albums_done} albums, +{album_expansion_added} songs '
           f'(total candidates: {len(candidates)})')
 
@@ -955,14 +1143,23 @@ def main() -> int:
                     with save_lock:
                         save_catalog(list(by_id.values()))
 
-    by_id = {s['i']: s for s in catalog_tools.repair(list(by_id.values()), verbose=False)}
-    save_catalog(list(by_id.values()))
+    by_id = {s['i']: s for s in catalog_tools.repair(list(by_id.values()), verbose=False)
+             if valid_row(s)}
+    kept = sum(1 for s in original if s['i'] in by_id)
+    lost = len(original) - kept - removed_upstream
+    if lost > max(150, MAX_SHRINK * len(original)):
+        print(f'!! Shrink guard: this run would drop {lost} of {len(original)} existing songs '
+              f'(limit {MAX_SHRINK:.0%}) — keeping the previous catalogue unchanged.', file=sys.stderr)
+        catalog_tools.save_catalog(original)
+        return 1
+    catalog_tools.save_catalog(list(by_id.values()))
     _save_checked({i: d for i, d in checked.items() if i in by_id})
 
     total = len(by_id)
     with_lyrics = sum(1 for s in by_id.values() if 'lr' in s)
     print('=== Done ===')
-    print(f'Songs in catalog:  {total} (was {existing_count})')
+    print(f'Songs in catalog:  {total} (was {existing_count}; {lost} existing dropped by the rules, '
+          f'{removed_upstream} gone from JioSaavn)')
     print(f'Added this run:    {found}')
     print(f'Failed this run:   {failed}')
     print(f'With lyrics:       {with_lyrics}')

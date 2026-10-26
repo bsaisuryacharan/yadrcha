@@ -193,10 +193,11 @@ NON_SONG_RE = re.compile(
 CLIP_TITLE_RE = re.compile(
     r'\btheme\b(?!\s*song)|\bmusic bit\b|\bbit\s*(?:song|\d)?\s*\)?$|^bit\b|\bteaser\b|\bpromo\b|'
     r'\btrailer\b|\bglimpse\b|\bspeech\b|\bkaraoke\b|\bthe intro\b|^intro\b|\bsignature tune\b|'
-    r'\bvoice of\b|\bnarration\b',
+    r'\bvoice of\b|\bnarration\b|\bfilm story\b|\bstory\s*(?:pt|part)\b',
     re.IGNORECASE,
 )
 MIN_SONG_SECONDS = 90      # shorter tracks are bits, jingles and padyam snippets
+MAX_SONG_SECONDS = 900     # longer ones are medleys, stage plays and film stories
 _YEAR_TAGGED_RE = re.compile(r'\b(?:19|20)\d{2}\b')
 _GENERIC_TERMS_RE = re.compile(
     r'\b(hits?|songs?|telugu|tollywood|pop|romantic|dance|sad|love|fresh|'
@@ -589,6 +590,8 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
             stats['drop:theme-or-clip'] += 1
         elif (s.get('d') or 999) < MIN_SONG_SECONDS:
             stats['drop:too-short'] += 1
+        elif (s.get('d') or 0) > MAX_SONG_SECONDS:
+            stats['drop:too-long'] += 1
         elif (DEVOTIONAL_RE.search(movie) and not _MOTION_PICTURE_RE.search(movie)
               and not known_film):
             stats['drop:devotional'] += 1
