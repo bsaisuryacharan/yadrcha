@@ -1122,6 +1122,15 @@ def main() -> int:
     unprobed = [s for s in by_id.values() if _needs_probe(s)]
     unprobed.sort(key=lambda s: (1 if s.get('nl') else 0, -(s.get('p') or 0)))
     unprobed = unprobed[:MAX_LYRICS]
+    # LRCLIB keeps growing: spare capacity re-tries songs that had no lyrics
+    # last time, a different slice each day (most played first in each slice).
+    if len(unprobed) < MAX_LYRICS:
+        import hashlib
+        retry = [s for s in by_id.values() if 'lr' not in s and (s.get('nl') or 0) >= lyrics_probe.PROBE_VERSION]
+        retry.sort(key=lambda s: hashlib.md5((s['i'] + TODAY).encode()).hexdigest())
+        retry = retry[:MAX_LYRICS - len(unprobed)]
+        retry.sort(key=lambda s: -(s.get('p') or 0))
+        unprobed += retry
     print(f'Probing LRClib for {len(unprobed)} songs (4 parallel workers, cap {MAX_LYRICS})...')
     probe_done = 0; probe_hit = 0
     save_every = 50

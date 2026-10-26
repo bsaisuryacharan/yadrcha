@@ -65,18 +65,38 @@ GitHub Action (`.github/workflows/refresh-catalog.yml`) runs
    play counts, cast (to tell film soundtracks from private albums and
    dubs), language, composer and a freshly decrypted stream URL. Songs
    JioSaavn has removed or relabelled leave the catalogue.
-2. Searches JioSaavn with ~110 broad queries, plus a **rotating year sweep**
-   (a different slice of film years every day, so each era keeps growing) and
-   the **new-releases feed**.
-3. Expands the albums behind those hits into full soundtracks, taking
-   never-expanded albums first.
-4. Keeps Telugu film songs only, decrypts the stream URL, and probes LRCLIB
+2. Searches JioSaavn with ~130 broad queries, a **rotating year sweep** (a
+   different slice of film years every day) and **new releases** (album
+   search for this and last year).
+3. **Film sweep:** looks up ~180 Telugu films a day that Wikidata knows and
+   the catalogue doesn't have yet, so every known film gets tried in turn
+   (`data/discovery.json` remembers what was searched; misses are retried
+   after 120 days).
+4. Expands up to 700 albums into full soundtracks: new releases and film-sweep
+   finds first, then albums never opened before. An album opened in the last
+   45 days is skipped, so each day covers new ground.
+5. Keeps Telugu film songs only, decrypts the stream URL, and probes LRCLIB
    for synced lyrics (`scripts/lyrics_probe.py`: exact match, then searches by
    title, first singer and film; a result is accepted only if title and
    duration match). Songs first checked with the old exact-only probe are
-   retried, most popular first, up to `MAX_LYRICS` (900) per run. The app also
+   retried, most popular first, up to `MAX_LYRICS` (900) per run; spare
+   capacity re-tries a daily slice of songs that had no lyrics before. The app also
    does a live lookup with the same checks for songs the build hasn't matched.
-5. Runs `scripts/catalog_tools.py` (below) and commits the result.
+6. Runs `scripts/catalog_tools.py` (below) and commits the result.
+
+**Safety.** A run can only add to the catalogue or remove what the rules
+reject; it can't corrupt it:
+
+- Every save, including the incremental ones, goes through the full repair,
+  and rows without a playable JioSaavn stream are rejected, so even a run
+  that dies half-way commits a clean catalogue.
+- When JioSaavn re-lists a song under a new id, the copy already in the
+  catalogue is kept, so likes, history and queues keep working.
+- If JioSaavn reports more than 2% of songs gone or not Telugu in one run,
+  it's treated as a glitch and nothing is removed.
+- If a run would drop more than 3% of existing songs for any other reason,
+  it keeps the previous catalogue unchanged and fails, so the problem shows
+  up in the Actions tab.
 
 ### Year repair (`scripts/catalog_tools.py`)
 
@@ -111,8 +131,8 @@ The same step also:
   merges duplicates.
 - Keeps the collection to songs people actually play. Popularity bars rise
   with the era, because streaming counts do: a song needs 10k plays
-  (before 1990), 25k (1990s) or 50k (2000 on), and its film's biggest song
-  needs 25k / 100k / 250k, or the whole film is too obscure. This and last
+  (before 1990), 20k (1990s) or 35k (2000 on), and its film's biggest song
+  needs 25k / 75k / 150k, or the whole film is too obscure. This and last
   year's releases get 10k / 50k while they catch up. `MIN_PLAYS` scales the
   bars (0 disables them).
 - Dubbed films (a "(Telugu)" release Wikidata doesn't know as a Telugu film,

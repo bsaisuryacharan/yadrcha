@@ -68,7 +68,7 @@ NOW_YEAR = datetime.now(timezone.utc).year
 # MIN_PLAYS scales the song floors (default 10000 = the table below; 0
 # disables the popularity filter entirely).
 MIN_PLAYS = int(os.environ.get('MIN_PLAYS', '10000'))
-_ERA_BARS = ((1990, 10_000, 25_000), (2000, 25_000, 100_000), (9999, 50_000, 250_000))
+_ERA_BARS = ((1990, 10_000, 25_000), (2000, 20_000, 75_000), (9999, 35_000, 150_000))
 _FRESH_BARS = (10_000, 50_000)         # this year's and last year's releases
 DUB_ALBUM_BAR = 1_000_000              # dubbed films: only the big hits
 
@@ -501,8 +501,16 @@ def recording_key(s: dict) -> tuple[str, frozenset]:
     return mkey(s.get('t')), frozenset(mkey(a) for a in split_artists(s.get('a')))
 
 
+TODAY = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+
+
 def _quality(s: dict) -> tuple:
-    return (0 if s.get('x') else 1, 1 if s.get('lr') else 0, s.get('p') or 0)
+    """Which copy of a duplicated song to keep: the film's own album over a
+    compilation, then the copy already in the catalogue (its id is what
+    people's likes, history and queues point to — JioSaavn often re-lists
+    the same recording under a new id), then lyrics, then plays."""
+    existing = s.get('ad') != TODAY
+    return (0 if s.get('x') else 1, 1 if existing else 0, 1 if s.get('lr') else 0, s.get('p') or 0)
 
 
 def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
@@ -916,6 +924,8 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
         if not keep.get('lr') and drop.get('lr'):
             keep['lr'] = drop['lr']
             keep.pop('nl', None)
+        if (drop.get('p') or 0) > (keep.get('p') or 0) and not drop.get('x'):
+            keep['p'] = drop['p']       # same recording: its best play count
         best[k] = keep
         stats['dedupe'] += 1
     out = list(best.values())
@@ -936,7 +946,8 @@ def repair(songs: list[dict], film_years: dict[str, list[int]] | None = None,
             dub = is_dub(movie, year, group)
             # No cast on JioSaavn and unknown to Wikidata: a private album
             # (devotional, folk, indie) or an old dub — big hits only.
-            castless = wiki(movie)[0] is None and any(s.get('nf') for s in group)
+            castless = (wiki(movie)[0] is None and not (year and year >= NOW_YEAR - 1)
+                        and sum(1 for s in group if s.get('nf')) * 2 > len(group))
             if dub or castless:
                 bar = max(bar, DUB_ALBUM_BAR)
             plays = sorted(s['p'] for s in group if s.get('p'))
