@@ -830,6 +830,16 @@ def requalify(by_id: dict[str, dict], checked: dict[str, str]) -> None:
               file=sys.stderr)
         for s in by_id.values():
             s.pop('nf', None)
+    # A healthy day removes a handful of songs. JioSaavn suddenly calling a
+    # large share of the catalogue gone or not Telugu is an upstream glitch:
+    # keep everything and try again next run.
+    limit = max(50, int(0.02 * len(by_id)))
+    if len(gone) > limit:
+        print(f'  ! {len(gone)} songs reported gone/not Telugu (limit {limit}) — '
+              f'looks like an upstream glitch, removing none this run', file=sys.stderr)
+        for i in gone:
+            checked.pop(i, None)
+        gone = []
     for i in gone:
         by_id.pop(i, None)
     print(f'Requalify done: {stats}')
@@ -945,10 +955,12 @@ def main() -> int:
     sweep_albums: list[str] = []
     films = films_to_sweep(by_id, discovery, FILM_SWEEP_PER_DAY)
     found_films = 0
+    searched = 0
     for n, (title, years) in enumerate(films, 1):
         if over_budget(0.35):
             print(f'  … film sweep budget reached at {n}/{len(films)} ({elapsed():.0f}s)')
             break
+        searched += 1
         ids = film_album_ids(title, years)
         discovery['films'][title] = TODAY
         if ids:
@@ -957,7 +969,7 @@ def main() -> int:
             seen_albums.add(aid)
             sweep_albums.append(aid)
         time.sleep(0.3)
-    print(f'Film sweep: {len(films)} missing films searched, {found_films} found on JioSaavn '
+    print(f'Film sweep: {searched} missing films searched, {found_films} found on JioSaavn '
           f'({len(sweep_albums)} albums)')
 
     # 2. Album expansion — for each unique album (movie soundtrack), fetch
