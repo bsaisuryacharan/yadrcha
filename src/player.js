@@ -55,7 +55,8 @@ export const player = {
       if (t > lastT && t - lastT < 2) library.addListenSeconds(t - lastT);
       lastT = t;
       this._positionState();
-      if (Math.floor(t) % 10 === 0) this.saveSession();
+      const sec = Math.floor(t);
+      if (sec % 10 === 0 && sec !== this._lastSaveSec) { this._lastSaveSec = sec; this.saveSession(); }
       if (this.sleepAt && Date.now() >= this.sleepAt) {
         this.setSleep(null);
         audio.pause();
@@ -152,7 +153,7 @@ export const player = {
     if (!this.current) return;
     if (auto && !skipError && this.repeat === 'one') {
       this.audio.currentTime = 0;
-      this.audio.play().catch(() => {});
+      this._play();
       return;
     }
     this.back.push(this.current.id);
@@ -183,7 +184,19 @@ export const player = {
         toast(`Finished ${from} — continuing with ${filterLabel(filter)} radio`);
       }
     }
-    if (song) this._load(song, true);
+    if (!song) {
+      // Nothing resolved (empty pick, stale order): keep the music going
+      // with radio rather than leaving the player paused.
+      if (!this.isRadio) {
+        const era = eraOfYear(this.current.year);
+        const filter = era ? { kind: 'era', id: era.id } : { kind: 'era', id: 'all' };
+        this.ctx = { type: 'radio', id: 'radio:' + filter.id, title: `${filterLabel(filter)} Radio`, filter };
+        this.order = []; this.pos = -1;
+      }
+      song = this._radioPick() || this.current;
+      this._refillRadio();
+    }
+    this._load(song, true);
     emit('queue');
   },
 
@@ -335,7 +348,7 @@ export const player = {
       this._seekOnce = () => { a.currentTime = startAt; a.removeEventListener('loadedmetadata', this._seekOnce); this._seekOnce = null; };
       a.addEventListener('loadedmetadata', this._seekOnce);
     }
-    if (autoplay) a.play().catch(() => { this.loading = false; emit('state'); });
+    if (autoplay) this._play();
     else this.loading = false;
     if (!keepTime) {
       library.markHeard(song.id);
@@ -346,6 +359,28 @@ export const player = {
     emit('track', song);
     emit('state');
     this.saveSession();
+  },
+
+  /** play() that survives a rejection (e.g. autoplay policy, or a load
+   *  racing the call): retry once when the source can play, then give up
+   *  visibly instead of staying silently paused. */
+  _play() {
+    const a = this.audio;
+    const fail = () => { this.loading = false; emit('state'); };
+    const p = a.play();
+    if (!p || !p.catch) return;
+    p.catch((err) => {
+      if (err?.name === 'AbortError') return; // superseded by a newer load
+      const src = a.src;
+      const retry = () => {
+        a.removeEventListener('canplay', retry);
+        if (a.src !== src || !a.paused) return;
+        a.play().catch(() => { fail(); toast('Tap play to continue'); });
+      };
+      if (a.readyState >= 3) retry();
+      else a.addEventListener('canplay', retry, { once: true });
+      setTimeout(() => { if (a.src === src && a.paused) fail(); }, 4000);
+    });
   },
 
   _metadata(s) {
