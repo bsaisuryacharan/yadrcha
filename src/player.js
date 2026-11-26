@@ -9,6 +9,8 @@ import { shuffle, store, toast } from './util.js';
 
 const SESSION_KEY = 'yadrcha.session.v2';
 const RADIO_BUFFER = 6;
+// 0-sample WAV, used to unlock the spare <audio> from a tap.
+const SILENCE = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
 
 const listeners = new Map();
 const emit = (ev, data) => (listeners.get(ev) || []).forEach((fn) => fn(data));
@@ -23,6 +25,9 @@ export const player = {
   radioBuffer: [],    // upcoming radio songs
   back: [],           // songs played before (for "previous" in radio)
   errors: 0,
+  spare: null,        // preloaded <audio> for the next song
+  _spareId: null,
+  _lastT: 0,
   loading: false,
   sleepAt: 0,         // epoch ms to pause at (0 = off)
   sleepEndOfTrack: false,
@@ -39,33 +44,60 @@ export const player = {
 
   init(audio) {
     this.audio = audio;
-    let lastT = 0;
-    audio.addEventListener('play', () => emit('state'));
-    audio.addEventListener('pause', () => { emit('state'); this.saveSession(); });
-    audio.addEventListener('playing', () => { this.loading = false; this.errors = 0; emit('state'); });
-    audio.addEventListener('waiting', () => { this.loading = true; emit('state'); });
-    audio.addEventListener('canplay', () => { if (this.loading) { this.loading = false; emit('state'); } });
-    audio.addEventListener('ended', () => {
+    // A second element preloads the next song and is swapped in when the
+    // current one ends. Re-pointing a single element at a new URL leaves
+    // silence while it loads, and phones suspend a page that's silent in
+    // the background (or refuse play() outside a gesture) — so the next
+    // song never starts. A swap starts audio instantly.
+    this.spare = audio.cloneNode(false);
+    this.spare.removeAttribute('id');
+    audio.after(this.spare);
+    this._wire(audio);
+    this._wire(this.spare);
+    this.on('queue', () => this._preloadNext());
+    this._mediaSession();
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this.saveSession(); });
+  },
+
+  _wire(el) {
+    const live = () => el === this.audio;
+    el.addEventListener('play', () => { if (live()) emit('state'); });
+    el.addEventListener('pause', () => { if (live()) { emit('state'); this.saveSession(); } });
+    el.addEventListener('playing', () => {
+      if (!live()) return;
+      this.loading = false; this.errors = 0; emit('state');
+      this._preloadNext();
+    });
+    el.addEventListener('waiting', () => { if (live()) { this.loading = true; emit('state'); } });
+    el.addEventListener('canplay', () => { if (live() && this.loading) { this.loading = false; emit('state'); } });
+    el.addEventListener('ended', () => {
+      if (!live()) return;
       if (this.sleepEndOfTrack) { this.setSleep(null); toast('Sleep timer — goodnight 🌙'); return; }
       this.next({ auto: true });
     });
-    audio.addEventListener('timeupdate', () => {
+    el.addEventListener('timeupdate', () => {
+      if (!live()) return;
       emit('time');
-      const t = audio.currentTime;
-      if (t > lastT && t - lastT < 2) library.addListenSeconds(t - lastT);
-      lastT = t;
+      const t = el.currentTime;
+      if (t > this._lastT && t - this._lastT < 2) library.addListenSeconds(t - this._lastT);
+      this._lastT = t;
       this._positionState();
       const sec = Math.floor(t);
       if (sec % 10 === 0 && sec !== this._lastSaveSec) { this._lastSaveSec = sec; this.saveSession(); }
       if (this.sleepAt && Date.now() >= this.sleepAt) {
         this.setSleep(null);
-        audio.pause();
+        el.pause();
         toast('Sleep timer — goodnight 🌙');
       }
     });
-    audio.addEventListener('loadedmetadata', () => { lastT = audio.currentTime; emit('time'); });
-    audio.addEventListener('error', () => {
-      if (!this.current || !audio.getAttribute('src')) return;
+    el.addEventListener('loadedmetadata', () => { if (live()) { this._lastT = el.currentTime; emit('time'); } });
+    el.addEventListener('error', () => {
+      if (!live()) {
+        // The preloaded song failed: don't swap to it, load it normally later.
+        if (this._spareId && !this._unlocking) this._spareId = null;
+        return;
+      }
+      if (!this.current || !el.getAttribute('src')) return;
       this.loading = false;
       this.errors++;
       if (this.errors >= 4) {
@@ -76,8 +108,41 @@ export const player = {
       toast(`Couldn’t play “${this.current.title}” — skipping`);
       setTimeout(() => this.next({ auto: true, skipError: true }), 400);
     });
-    this._mediaSession();
-    document.addEventListener('visibilitychange', () => { if (document.hidden) this.saveSession(); });
+  },
+
+  /** Unlock the spare element inside a user gesture (iOS only lets an
+   *  element play later if it has played once from a tap). */
+  _unlockSpare() {
+    if (this._unlocked || !this.spare) return;
+    this._unlocked = true;
+    const sp = this.spare;
+    this._unlocking = true;
+    sp.muted = true;
+    sp.src = SILENCE;
+    const done = () => {
+      sp.pause(); sp.muted = false; sp.removeAttribute('src');
+      this._unlocking = false; this._spareId = null;
+      this._preloadNext();
+    };
+    const pr = sp.play();
+    if (pr && pr.then) pr.then(done, () => { this._unlocked = false; done(); });
+    else done();
+  },
+
+  _peekNext() {
+    if (this.repeat === 'one') return null;
+    if (this.userQueue.length) return this.userQueue[0];
+    if (this.isRadio) return this.radioBuffer[0] || null;
+    if (this.ctx) return catalog.byId.get(this.order[this.pos + 1]) || null;
+    return null;
+  },
+  _preloadNext() {
+    if (!this.spare || this._unlocking || this.loading || this.audio.paused) return;
+    const s = this._peekNext();
+    if (!s || this._spareId === s.id) return;
+    this._spareId = s.id;
+    this.spare.src = s.url;
+    this.spare.load();
   },
 
   /* ---------- starting playback ---------- */
@@ -338,15 +403,30 @@ export const player = {
 
   _load(song, autoplay, { keepTime = false, startAt = 0 } = {}) {
     if (!song) return;
-    const a = this.audio;
     this.current = song;
     this.loading = true;
     // Drop any pending resume-seek from a previous load.
-    if (this._seekOnce) { a.removeEventListener('loadedmetadata', this._seekOnce); this._seekOnce = null; }
-    a.src = song.url;
-    if (startAt) {
-      this._seekOnce = () => { a.currentTime = startAt; a.removeEventListener('loadedmetadata', this._seekOnce); this._seekOnce = null; };
-      a.addEventListener('loadedmetadata', this._seekOnce);
+    if (this._seekOnce) { this.audio.removeEventListener('loadedmetadata', this._seekOnce); this._seekOnce = null; }
+    if (autoplay) this._unlockSpare();
+    const ready = autoplay && !startAt && !this._unlocking && this._spareId === song.id && this.spare.getAttribute('src');
+    if (ready) {
+      // The next song is already buffering in the spare element: swap.
+      const old = this.audio;
+      this.audio = this.spare;
+      this.spare = old;
+      this._spareId = null;
+      old.pause();
+      old.removeAttribute('src');
+      old.load();
+      this._lastT = 0;
+    }
+    const a = this.audio;
+    if (!ready) {
+      a.src = song.url;
+      if (startAt) {
+        this._seekOnce = () => { a.currentTime = startAt; a.removeEventListener('loadedmetadata', this._seekOnce); this._seekOnce = null; };
+        a.addEventListener('loadedmetadata', this._seekOnce);
+      }
     }
     if (autoplay) this._play();
     else this.loading = false;
